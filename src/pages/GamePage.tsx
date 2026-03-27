@@ -9,6 +9,7 @@ import { GameLog } from '@/components/game/GameLog';
 import { PlayerInfo } from '@/components/game/PlayerInfo';
 import { ResolveTurnButton } from '@/components/game/ResolveTurnButton';
 import { motion } from 'framer-motion';
+import { Tutorial } from '@/components/game/Tutorial';
 
 export default function GamePage() {
   const { partidaId } = useParams<{ partidaId: string }>();
