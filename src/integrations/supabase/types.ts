@@ -14,7 +14,388 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      acoes: {
+        Row: {
+          created_at: string
+          destino_id: string | null
+          id: string
+          origem_id: string | null
+          partida_id: string
+          player_id: string
+          quantidade: number | null
+          tipo: Database["public"]["Enums"]["action_type"]
+          turno_id: string
+        }
+        Insert: {
+          created_at?: string
+          destino_id?: string | null
+          id?: string
+          origem_id?: string | null
+          partida_id: string
+          player_id: string
+          quantidade?: number | null
+          tipo: Database["public"]["Enums"]["action_type"]
+          turno_id: string
+        }
+        Update: {
+          created_at?: string
+          destino_id?: string | null
+          id?: string
+          origem_id?: string | null
+          partida_id?: string
+          player_id?: string
+          quantidade?: number | null
+          tipo?: Database["public"]["Enums"]["action_type"]
+          turno_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "acoes_partida_id_fkey"
+            columns: ["partida_id"]
+            isOneToOne: false
+            referencedRelation: "partidas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acoes_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acoes_turno_id_fkey"
+            columns: ["turno_id"]
+            isOneToOne: false
+            referencedRelation: "turnos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      eventos: {
+        Row: {
+          created_at: string
+          descricao: string
+          id: string
+          partida_id: string
+          territorios_afetados: string[] | null
+          tipo: Database["public"]["Enums"]["event_type"]
+          turno_id: string
+        }
+        Insert: {
+          created_at?: string
+          descricao: string
+          id?: string
+          partida_id: string
+          territorios_afetados?: string[] | null
+          tipo: Database["public"]["Enums"]["event_type"]
+          turno_id: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string
+          id?: string
+          partida_id?: string
+          territorios_afetados?: string[] | null
+          tipo?: Database["public"]["Enums"]["event_type"]
+          turno_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eventos_partida_id_fkey"
+            columns: ["partida_id"]
+            isOneToOne: false
+            referencedRelation: "partidas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventos_turno_id_fkey"
+            columns: ["turno_id"]
+            isOneToOne: false
+            referencedRelation: "turnos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_logs: {
+        Row: {
+          created_at: string
+          dados: Json | null
+          id: string
+          mensagem: string
+          nivel: Database["public"]["Enums"]["log_level"]
+          partida_id: string
+          player_id: string | null
+          turno_numero: number
+        }
+        Insert: {
+          created_at?: string
+          dados?: Json | null
+          id?: string
+          mensagem: string
+          nivel?: Database["public"]["Enums"]["log_level"]
+          partida_id: string
+          player_id?: string | null
+          turno_numero: number
+        }
+        Update: {
+          created_at?: string
+          dados?: Json | null
+          id?: string
+          mensagem?: string
+          nivel?: Database["public"]["Enums"]["log_level"]
+          partida_id?: string
+          player_id?: string | null
+          turno_numero?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_logs_partida_id_fkey"
+            columns: ["partida_id"]
+            isOneToOne: false
+            referencedRelation: "partidas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_logs_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      matchmaking_queue: {
+        Row: {
+          id: string
+          joined_at: string
+          player_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          player_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matchmaking_queue_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: true
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partidas: {
+        Row: {
+          created_at: string
+          id: string
+          max_jogadores: number
+          status: Database["public"]["Enums"]["game_status"]
+          turno_atual: number
+          updated_at: string
+          vencedor_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          max_jogadores?: number
+          status?: Database["public"]["Enums"]["game_status"]
+          turno_atual?: number
+          updated_at?: string
+          vencedor_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          max_jogadores?: number
+          status?: Database["public"]["Enums"]["game_status"]
+          turno_atual?: number
+          updated_at?: string
+          vencedor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partidas_vencedor_id_fkey"
+            columns: ["vencedor_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      player_estado: {
+        Row: {
+          acoes_restantes: number
+          ativo: boolean
+          cor: string
+          created_at: string
+          id: string
+          partida_id: string
+          player_id: string
+          spice: number
+        }
+        Insert: {
+          acoes_restantes?: number
+          ativo?: boolean
+          cor?: string
+          created_at?: string
+          id?: string
+          partida_id: string
+          player_id: string
+          spice?: number
+        }
+        Update: {
+          acoes_restantes?: number
+          ativo?: boolean
+          cor?: string
+          created_at?: string
+          id?: string
+          partida_id?: string
+          player_id?: string
+          spice?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_estado_partida_id_fkey"
+            columns: ["partida_id"]
+            isOneToOne: false
+            referencedRelation: "partidas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_estado_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      players: {
+        Row: {
+          created_at: string
+          display_name: string
+          games_played: number
+          games_won: number
+          id: string
+          spice_total: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string
+          games_played?: number
+          games_won?: number
+          id?: string
+          spice_total?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          games_played?: number
+          games_won?: number
+          id?: string
+          spice_total?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      territorios: {
+        Row: {
+          defesa_base: number
+          dono_id: string | null
+          forca: number
+          id: string
+          nome: string
+          partida_id: string
+          pos_x: number
+          pos_y: number
+          producao_spice: number
+          vizinhos: string[]
+        }
+        Insert: {
+          defesa_base?: number
+          dono_id?: string | null
+          forca?: number
+          id: string
+          nome: string
+          partida_id: string
+          pos_x?: number
+          pos_y?: number
+          producao_spice?: number
+          vizinhos?: string[]
+        }
+        Update: {
+          defesa_base?: number
+          dono_id?: string | null
+          forca?: number
+          id?: string
+          nome?: string
+          partida_id?: string
+          pos_x?: number
+          pos_y?: number
+          producao_spice?: number
+          vizinhos?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "territorios_dono_id_fkey"
+            columns: ["dono_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "territorios_partida_id_fkey"
+            columns: ["partida_id"]
+            isOneToOne: false
+            referencedRelation: "partidas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      turnos: {
+        Row: {
+          created_at: string
+          id: string
+          numero: number
+          partida_id: string
+          resolved_at: string | null
+          resolvido: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          numero: number
+          partida_id: string
+          resolved_at?: string | null
+          resolvido?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          numero?: number
+          partida_id?: string
+          resolved_at?: string | null
+          resolvido?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "turnos_partida_id_fkey"
+            columns: ["partida_id"]
+            isOneToOne: false
+            referencedRelation: "partidas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +404,10 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      action_type: "mover" | "atacar" | "fortificar" | "espionar" | "extrair"
+      event_type: "tempestade" | "vermes" | "superproducao" | "instabilidade"
+      game_status: "waiting" | "in_progress" | "finished"
+      log_level: "interno" | "jogador" | "publico"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +534,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      action_type: ["mover", "atacar", "fortificar", "espionar", "extrair"],
+      event_type: ["tempestade", "vermes", "superproducao", "instabilidade"],
+      game_status: ["waiting", "in_progress", "finished"],
+      log_level: ["interno", "jogador", "publico"],
+    },
   },
 } as const
