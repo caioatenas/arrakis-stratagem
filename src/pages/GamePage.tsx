@@ -81,6 +81,8 @@ export default function GamePage() {
           <GameLog logs={logs} />
         </div>
       </div>
+
+      <Tutorial />
     </div>
   );
 }
