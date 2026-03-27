@@ -16,7 +16,6 @@ export default function Matchmaking() {
   const [queueCount, setQueueCount] = useState(0);
   const [searching, setSearching] = useState(false);
 
-  // Check queue count
   useEffect(() => {
     const fetchQueue = async () => {
       const { count } = await supabase
@@ -25,16 +24,13 @@ export default function Matchmaking() {
       setQueueCount(count || 0);
     };
     fetchQueue();
-
     const channel = supabase
       .channel('queue-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matchmaking_queue' }, () => fetchQueue())
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Check if already in a game
   useEffect(() => {
     if (!player) return;
     const checkActiveGame = async () => {
@@ -43,66 +39,50 @@ export default function Matchmaking() {
         .select('partida_id, partidas(status)')
         .eq('player_id', player.id)
         .eq('ativo', true);
-
       if (data && data.length > 0) {
         const active = data.find((d: any) => d.partidas?.status === 'in_progress');
-        if (active) {
-          navigate(`/game/${active.partida_id}`);
-        }
+        if (active) navigate(`/game/${active.partida_id}`);
       }
     };
     checkActiveGame();
   }, [player, navigate]);
 
-  // Listen for match creation
   useEffect(() => {
     if (!player || !inQueue) return;
-
     const channel = supabase
       .channel('match-created')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'player_estado', filter: `player_id=eq.${player.id}` },
         (payload: any) => {
-          if (payload.new?.partida_id) {
-            navigate(`/game/${payload.new.partida_id}`);
-          }
+          if (payload.new?.partida_id) navigate(`/game/${payload.new.partida_id}`);
         }
       )
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [player, inQueue, navigate]);
 
   const joinQueue = async () => {
     if (!player) return;
     setSearching(true);
-
-    // Add to queue
     await supabase.from('matchmaking_queue').upsert({ player_id: player.id });
     setInQueue(true);
-
-    // Check if enough players (2+ for now, can be 4)
     const { data: queuePlayers } = await supabase
       .from('matchmaking_queue')
       .select('player_id')
       .order('joined_at', { ascending: true })
       .limit(4);
-
     if (queuePlayers && queuePlayers.length >= 2) {
       await createMatch(queuePlayers.map(q => q.player_id));
     }
   };
 
   const createMatch = async (playerIds: string[]) => {
-    // Create partida
     const { data: partida } = await supabase
       .from('partidas')
       .insert({ status: 'in_progress', turno_atual: 1, max_jogadores: playerIds.length })
       .select()
       .single();
-
     if (!partida) return;
 
-    // Create player estados
     const estados = playerIds.map((pid, i) => ({
       partida_id: partida.id,
       player_id: pid,
@@ -112,7 +92,7 @@ export default function Matchmaking() {
     }));
     await supabase.from('player_estado').insert(estados);
 
-    // Distribute territories
+    // Distribute 20 territories among players
     const shuffledTerritories = [...TERRITORIES].sort(() => Math.random() - 0.5);
     const terrInserts = shuffledTerritories.map((t, i) => ({
       id: t.id,
@@ -125,26 +105,19 @@ export default function Matchmaking() {
       vizinhos: t.vizinhos,
       pos_x: t.pos_x,
       pos_y: t.pos_y,
+      regiao: t.regiao,
+      tipo: t.tipo,
     }));
     await supabase.from('territorios').insert(terrInserts);
 
-    // Create first turn
-    await supabase.from('turnos').insert({
-      partida_id: partida.id,
-      numero: 1,
-    });
-
-    // Remove from queue
+    await supabase.from('turnos').insert({ partida_id: partida.id, numero: 1 });
     await supabase.from('matchmaking_queue').delete().in('player_id', playerIds);
-
-    // Log
     await supabase.from('game_logs').insert({
       partida_id: partida.id,
       turno_numero: 1,
       nivel: 'publico',
-      mensagem: `Partida iniciada com ${playerIds.length} jogadores!`,
+      mensagem: `Partida iniciada com ${playerIds.length} jogadores! 20 territórios em disputa.`,
     });
-
     navigate(`/game/${partida.id}`);
   };
 
@@ -157,28 +130,18 @@ export default function Matchmaking() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-lg space-y-8 text-center"
-      >
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-lg space-y-8 text-center">
         <div className="space-y-2">
           <h1 className="text-display text-5xl text-primary tracking-[0.25em]">ARRAKIS</h1>
           <p className="text-muted-foreground font-body text-lg">Guerra pela Especiaria</p>
         </div>
-
         <div className="border-glow rounded-lg p-8 space-y-6">
           <div className="flex items-center justify-center gap-2 text-sand">
             <Users className="w-5 h-5" />
             <span className="font-body text-lg">{queueCount} na fila</span>
           </div>
-
           {!inQueue ? (
-            <Button
-              onClick={joinQueue}
-              disabled={!player}
-              className="w-full h-14 text-lg font-display tracking-[0.15em]"
-            >
+            <Button onClick={joinQueue} disabled={!player} className="w-full h-14 text-lg font-display tracking-[0.15em]">
               Encontrar Partida
             </Button>
           ) : (
@@ -187,16 +150,9 @@ export default function Matchmaking() {
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 <span className="font-body text-foreground text-lg">Procurando oponentes...</span>
               </div>
-              <Button
-                onClick={leaveQueue}
-                variant="outline"
-                className="font-body"
-              >
-                Cancelar
-              </Button>
+              <Button onClick={leaveQueue} variant="outline" className="font-body">Cancelar</Button>
             </div>
           )}
-
           {player && (
             <div className="pt-4 border-t border-border">
               <p className="text-sm text-muted-foreground font-body">
@@ -208,15 +164,8 @@ export default function Matchmaking() {
             </div>
           )}
         </div>
-
-        <Button
-          onClick={signOut}
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground font-body"
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Sair
+        <Button onClick={signOut} variant="ghost" size="sm" className="text-muted-foreground font-body">
+          <LogOut className="w-4 h-4 mr-2" /> Sair
         </Button>
       </motion.div>
     </div>

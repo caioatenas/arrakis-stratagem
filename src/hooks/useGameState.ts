@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface Territory {
   id: string;
@@ -13,6 +12,8 @@ export interface Territory {
   vizinhos: string[];
   pos_x: number;
   pos_y: number;
+  regiao: string;
+  tipo: string;
 }
 
 export interface PlayerEstado {
