@@ -150,7 +150,7 @@ export function ActionPanel({ selectedTerritory, territories, playerEstado, play
               <input
                 type="range"
                 min={1}
-                max={currentTerr?.forca || 1}
+                max={Math.max(1, Math.floor((currentTerr?.forca || 2) / 2))}
                 value={quantity}
                 onChange={e => setQuantity(Number(e.target.value))}
                 className="w-full accent-primary"

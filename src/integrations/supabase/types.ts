@@ -318,6 +318,8 @@ export type Database = {
           pos_x: number
           pos_y: number
           producao_spice: number
+          regiao: string
+          tipo: string
           vizinhos: string[]
         }
         Insert: {
@@ -330,6 +332,8 @@ export type Database = {
           pos_x?: number
           pos_y?: number
           producao_spice?: number
+          regiao?: string
+          tipo?: string
           vizinhos?: string[]
         }
         Update: {
@@ -342,6 +346,8 @@ export type Database = {
           pos_x?: number
           pos_y?: number
           producao_spice?: number
+          regiao?: string
+          tipo?: string
           vizinhos?: string[]
         }
         Relationships: [
