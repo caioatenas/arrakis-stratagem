@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
 import type { Territory, PlayerEstado } from '@/hooks/useGameState';
+import type { MovementFlow } from '@/hooks/useMovementFlow';
 import { ACTION_LABELS } from '@/lib/gameConstants';
-import { Swords, Shield, Eye, Move, Gem } from 'lucide-react';
+import { Swords, Shield, Eye, Move, Gem, ArrowRight, X, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type ActionType = 'mover' | 'atacar' | 'fortificar' | 'espionar' | 'extrair';
 
@@ -15,6 +18,13 @@ interface ActionPanelProps {
   partidaId: string | null;
   turnoId: string | null;
   onAction: () => void;
+  movementFlow: MovementFlow;
+  onStartMove: () => void;
+  onSetQuantity: (q: number) => void;
+  onConfirmQuantity: () => void;
+  onSelectDestination: (id: string) => void;
+  onConfirmMove: () => void;
+  onCancelMove: () => void;
 }
 
 const ACTION_ICONS: Record<ActionType, React.ReactNode> = {
@@ -25,27 +35,182 @@ const ACTION_ICONS: Record<ActionType, React.ReactNode> = {
   extrair: <Gem className="w-4 h-4" />,
 };
 
-export function ActionPanel({ selectedTerritory, territories, playerEstado, playerId, partidaId, turnoId, onAction }: ActionPanelProps) {
+export function ActionPanel({
+  selectedTerritory, territories, playerEstado, playerId, partidaId, turnoId, onAction,
+  movementFlow, onStartMove, onSetQuantity, onConfirmQuantity, onSelectDestination, onConfirmMove, onCancelMove,
+}: ActionPanelProps) {
   const [selectedAction, setSelectedAction] = useState<ActionType | null>(null);
   const [targetTerritory, setTargetTerritory] = useState<string | null>(null);
-  const [quantity, setQuantity] = useState(10);
   const [submitting, setSubmitting] = useState(false);
 
   const currentTerr = territories.find(t => t.id === selectedTerritory);
   const isOwnTerritory = currentTerr?.dono_id === playerId;
   const neighbors = currentTerr ? territories.filter(t => currentTerr.vizinhos.includes(t.id)) : [];
   const acoes = playerEstado?.acoes_restantes ?? 0;
+  const isInMoveFlow = movementFlow.state !== 'idle';
 
-  const canSubmit = () => {
+  // === MOVEMENT FLOW UI ===
+  if (isInMoveFlow) {
+    const originTerr = territories.find(t => t.id === movementFlow.originId);
+    const destTerr = movementFlow.destinationId ? territories.find(t => t.id === movementFlow.destinationId) : null;
+    const remaining = (originTerr?.forca ?? 0) - movementFlow.quantity;
+
+    return (
+      <div className="border-glow rounded-lg p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-display text-primary text-lg">Mover Tropas</h3>
+          <Button variant="ghost" size="icon" onClick={onCancelMove} className="h-7 w-7">
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex items-center gap-1 text-xs font-body">
+          {['Origem', 'Quantidade', 'Destino', 'Confirmar'].map((label, i) => {
+            const stepStates: MovementFlow['state'][] = ['origin_selected', 'action_selected', 'quantity_selected', 'confirming'];
+            const currentIdx = stepStates.indexOf(movementFlow.state);
+            const isActive = i <= (currentIdx >= 0 ? currentIdx : 0);
+            return (
+              <div key={label} className="flex items-center gap-1">
+                {i > 0 && <div className={`w-4 h-px ${isActive ? 'bg-primary' : 'bg-border'}`} />}
+                <span className={`px-1.5 py-0.5 rounded text-[10px] ${isActive ? 'bg-primary/20 text-primary' : 'bg-secondary/50 text-muted-foreground'}`}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Origin info */}
+        <div className="bg-secondary/30 rounded p-2 text-sm font-body space-y-0.5">
+          <p className="text-muted-foreground">Origem: <span className="text-foreground font-semibold">{originTerr?.nome}</span></p>
+          <p className="text-muted-foreground">Força atual: <span className="text-primary font-bold">{originTerr?.forca}</span></p>
+        </div>
+
+        {/* Step 2: Quantity selection */}
+        {(movementFlow.state === 'action_selected' || movementFlow.state === 'origin_selected') && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+            <p className="text-xs text-muted-foreground font-body">Selecione quantas tropas mover:</p>
+
+            {/* Quick buttons */}
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { label: '25%', value: Math.max(1, Math.floor(movementFlow.maxQuantity * 0.25)) },
+                { label: '50%', value: Math.max(1, Math.floor(movementFlow.maxQuantity * 0.5)) },
+                { label: '75%', value: Math.max(1, Math.floor(movementFlow.maxQuantity * 0.75)) },
+                { label: 'MAX', value: movementFlow.maxQuantity },
+              ].map(btn => (
+                <button key={btn.label}
+                  onClick={() => onSetQuantity(btn.value)}
+                  className={`py-1.5 rounded text-xs font-body transition-all border
+                    ${movementFlow.quantity === btn.value
+                      ? 'bg-primary/20 border-primary text-primary'
+                      : 'bg-secondary/50 border-border text-secondary-foreground hover:bg-secondary'
+                    }`}>
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Slider */}
+            <Slider
+              min={1} max={movementFlow.maxQuantity} step={1}
+              value={[movementFlow.quantity]}
+              onValueChange={([v]) => onSetQuantity(v)}
+            />
+
+            {/* Stats preview */}
+            <div className="bg-secondary/20 rounded p-2 text-xs font-body space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Movendo:</span>
+                <span className="text-primary font-bold text-sm">{movementFlow.quantity}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Restante em {originTerr?.nome}:</span>
+                <span className={`font-bold ${remaining <= 2 ? 'text-destructive' : 'text-foreground'}`}>{remaining}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Disponível:</span>
+                <span className="text-muted-foreground">{movementFlow.maxQuantity} máx</span>
+              </div>
+            </div>
+
+            <Button onClick={onConfirmQuantity} className="w-full font-display tracking-wider" size="sm">
+              Selecionar Destino <ArrowRight className="w-3.5 h-3.5 ml-1" />
+            </Button>
+          </motion.div>
+        )}
+
+        {/* Step 3: Destination selection */}
+        {movementFlow.state === 'quantity_selected' && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+            <p className="text-xs text-muted-foreground font-body">Clique em um território vizinho no mapa ou selecione abaixo:</p>
+            <div className="flex flex-wrap gap-1">
+              {neighbors
+                .filter(n => !n.dono_id || n.dono_id === playerId)
+                .map(n => (
+                  <button key={n.id} onClick={() => onSelectDestination(n.id)}
+                    className="px-3 py-1.5 rounded text-xs font-body transition-all border bg-secondary/50 border-border text-secondary-foreground hover:bg-primary/20 hover:border-primary hover:text-primary">
+                    {n.nome}
+                  </button>
+                ))}
+            </div>
+            {neighbors.filter(n => !n.dono_id || n.dono_id === playerId).length === 0 && (
+              <p className="text-xs text-destructive font-body">Nenhum destino válido (apenas seus territórios ou neutros).</p>
+            )}
+          </motion.div>
+        )}
+
+        {/* Step 4: Confirmation */}
+        {movementFlow.state === 'confirming' && destTerr && (
+          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="space-y-3">
+            <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 text-sm font-body">
+              <p className="text-primary font-display tracking-wide text-center mb-2">Confirmar Movimento</p>
+              <div className="flex items-center justify-center gap-2 text-foreground">
+                <span className="font-semibold">{originTerr?.nome}</span>
+                <ArrowRight className="w-4 h-4 text-primary" />
+                <span className="font-semibold">{destTerr.nome}</span>
+              </div>
+              <p className="text-center text-primary font-bold text-lg mt-1">{movementFlow.quantity} tropas</p>
+              <div className="mt-2 pt-2 border-t border-border/50 space-y-0.5 text-xs text-muted-foreground">
+                <p>{originTerr?.nome} ficará com: <span className="text-foreground font-semibold">{remaining}</span></p>
+                <p>{destTerr.nome} ficará com: <span className="text-foreground font-semibold">{(destTerr.forca || 0) + movementFlow.quantity}</span></p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={onCancelMove} size="sm" className="font-body">
+                Cancelar
+              </Button>
+              <Button onClick={onConfirmMove} size="sm" className="font-display tracking-wider">
+                <Check className="w-3.5 h-3.5 mr-1" /> Confirmar
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Animating state */}
+        {movementFlow.state === 'animating' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-4">
+            <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.2 }}
+              className="text-primary font-display tracking-widest text-sm">
+              MOVENDO TROPAS...
+            </motion.div>
+          </motion.div>
+        )}
+      </div>
+    );
+  }
+
+  // === NORMAL ACTION PANEL (non-movement) ===
+  const canSubmitNonMove = () => {
     if (!selectedAction || !partidaId || !turnoId || !playerId || acoes <= 0) return false;
-    if (['mover', 'atacar'].includes(selectedAction) && !targetTerritory) return false;
-    if (selectedAction === 'mover' && (!quantity || quantity <= 0)) return false;
+    if (selectedAction === 'atacar' && !targetTerritory) return false;
     if (['fortificar', 'espionar', 'extrair'].includes(selectedAction) && !selectedTerritory) return false;
     return true;
   };
 
-  const handleSubmit = async () => {
-    if (!canSubmit() || submitting) return;
+  const handleSubmitNonMove = async () => {
+    if (!canSubmitNonMove() || submitting) return;
     setSubmitting(true);
 
     const acao = {
@@ -54,29 +219,23 @@ export function ActionPanel({ selectedTerritory, territories, playerEstado, play
       partida_id: partidaId!,
       tipo: selectedAction! as ActionType,
       origem_id: selectedTerritory,
-      destino_id: ['mover', 'atacar', 'espionar'].includes(selectedAction!) ? targetTerritory : selectedTerritory,
-      quantidade: selectedAction === 'mover' ? quantity : 0,
+      destino_id: ['atacar', 'espionar'].includes(selectedAction!) ? targetTerritory : selectedTerritory,
+      quantidade: 0,
     };
 
     await supabase.from('acoes').insert(acao);
-    
-    // Decrement actions remaining
     if (playerEstado) {
-      await supabase
-        .from('player_estado')
-        .update({ acoes_restantes: Math.max(0, acoes - 1) })
-        .eq('id', playerEstado.id);
+      await supabase.from('player_estado').update({ acoes_restantes: Math.max(0, acoes - 1) }).eq('id', playerEstado.id);
     }
 
     setSelectedAction(null);
     setTargetTerritory(null);
-    setQuantity(10);
     setSubmitting(false);
     onAction();
   };
 
   return (
-    <div className="border-glow rounded-lg p-4 space-y-4">
+    <div className="border-glow rounded-lg p-4 space-y-4" data-tutorial="actions">
       <div className="flex items-center justify-between">
         <h3 className="text-display text-primary text-lg">Ações</h3>
         <span className="text-sm text-muted-foreground font-body">
@@ -90,29 +249,37 @@ export function ActionPanel({ selectedTerritory, territories, playerEstado, play
 
       {selectedTerritory && (
         <>
-          <div className="text-sm text-sand-light font-body mb-2">
+          <div className="text-sm text-foreground/80 font-body mb-2">
             {currentTerr?.nome} — Força: {currentTerr?.forca} | Defesa: {currentTerr?.defesa_base}
           </div>
 
           <div className="grid grid-cols-5 gap-1">
             {(Object.keys(ACTION_LABELS) as ActionType[]).map(action => {
+              if (action === 'mover') {
+                // Special: triggers movement flow
+                const disabled = acoes <= 0 || !isOwnTerritory || (currentTerr?.forca ?? 0) < 2;
+                return (
+                  <button key={action} onClick={onStartMove} disabled={disabled}
+                    className="flex flex-col items-center gap-1 p-2 rounded text-xs transition-all bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 disabled:opacity-30 disabled:cursor-not-allowed">
+                    {ACTION_ICONS[action]}
+                    <span className="font-body">Mover</span>
+                  </button>
+                );
+              }
+
               const disabled = acoes <= 0 ||
-                (['mover', 'atacar'].includes(action) && !isOwnTerritory) ||
+                (['atacar'].includes(action) && !isOwnTerritory) ||
                 (['fortificar', 'extrair'].includes(action) && !isOwnTerritory);
 
               return (
-                <button
-                  key={action}
+                <button key={action}
                   onClick={() => { setSelectedAction(action); setTargetTerritory(null); }}
                   disabled={disabled}
                   className={`flex flex-col items-center gap-1 p-2 rounded text-xs transition-all
                     ${selectedAction === action
                       ? 'bg-primary/20 border border-primary text-primary'
                       : 'bg-secondary/50 border border-border text-secondary-foreground hover:bg-secondary'
-                    }
-                    disabled:opacity-30 disabled:cursor-not-allowed
-                  `}
-                >
+                    } disabled:opacity-30 disabled:cursor-not-allowed`}>
                   {ACTION_ICONS[action]}
                   <span className="font-body">{action.charAt(0).toUpperCase() + action.slice(1)}</span>
                 </button>
@@ -120,22 +287,18 @@ export function ActionPanel({ selectedTerritory, territories, playerEstado, play
             })}
           </div>
 
-          {/* Target selection for movement/attack */}
-          {selectedAction && ['mover', 'atacar', 'espionar'].includes(selectedAction) && (
+          {/* Target for attack/spy */}
+          {selectedAction && ['atacar', 'espionar'].includes(selectedAction) && (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">Selecione destino:</p>
               <div className="flex flex-wrap gap-1">
                 {neighbors.map(n => (
-                  <button
-                    key={n.id}
-                    onClick={() => setTargetTerritory(n.id)}
+                  <button key={n.id} onClick={() => setTargetTerritory(n.id)}
                     className={`px-3 py-1 rounded text-xs font-body transition-all
                       ${targetTerritory === n.id
                         ? 'bg-accent/30 border border-accent text-accent-foreground'
                         : 'bg-secondary/50 border border-border text-secondary-foreground hover:bg-secondary'
-                      }
-                    `}
-                  >
+                      }`}>
                     {n.nome}
                   </button>
                 ))}
@@ -143,26 +306,8 @@ export function ActionPanel({ selectedTerritory, territories, playerEstado, play
             </div>
           )}
 
-          {/* Quantity for movement */}
-          {selectedAction === 'mover' && targetTerritory && (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Quantidade: {quantity}</p>
-              <input
-                type="range"
-                min={1}
-                max={Math.max(1, Math.floor((currentTerr?.forca || 2) / 2))}
-                value={quantity}
-                onChange={e => setQuantity(Number(e.target.value))}
-                className="w-full accent-primary"
-              />
-            </div>
-          )}
-
-          <Button
-            onClick={handleSubmit}
-            disabled={!canSubmit() || submitting}
-            className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-display tracking-wider"
-          >
+          <Button onClick={handleSubmitNonMove} disabled={!canSubmitNonMove() || submitting}
+            className="w-full font-display tracking-wider">
             {submitting ? 'Enviando...' : 'Executar Ação'}
           </Button>
         </>
