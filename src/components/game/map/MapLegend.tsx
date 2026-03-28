@@ -54,7 +54,7 @@ export function MapLegend({ playerEstados }: MapLegendProps) {
           <span className="text-foreground">Alta defesa (7+)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-yellow-400">✦</span>
+          <span className="text-accent">✦</span>
           <span className="text-foreground">Território rico</span>
         </div>
       </div>
