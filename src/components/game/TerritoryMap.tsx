@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Territory, PlayerEstado } from '@/hooks/useGameState';
+import type { MovementFlow } from '@/hooks/useMovementFlow';
 import { TERRITORIES, REGION_COLORS, REGION_NAMES } from '@/lib/gameConstants';
 import { getFactionByColor, FACTIONS } from '@/lib/factions';
 import { MapDefs } from './map/MapDefs';
@@ -9,6 +10,7 @@ import { TroopPin } from './map/TroopPin';
 import { FactionBanner } from './map/FactionBanner';
 import { SpiceParticles } from './map/SpiceParticles';
 import { MapLegend } from './map/MapLegend';
+import { MovementAnimation } from './map/MovementAnimation';
 import mapBg from '@/assets/map-background.jpg';
 
 interface TerritoryMapProps {
@@ -17,6 +19,9 @@ interface TerritoryMapProps {
   selectedTerritory: string | null;
   onSelectTerritory: (id: string) => void;
   currentPlayerId: string | null;
+  movementFlow: MovementFlow;
+  playerColor: string;
+  onAnimationComplete: () => void;
 }
 
 function getTerritoryPath(cx: number, cy: number, r: number, seed: number): string {
@@ -35,7 +40,7 @@ function getTerritoryPath(cx: number, cy: number, r: number, seed: number): stri
   return d;
 }
 
-export function TerritoryMap({ territories, playerEstados, selectedTerritory, onSelectTerritory, currentPlayerId }: TerritoryMapProps) {
+export function TerritoryMap({ territories, playerEstados, selectedTerritory, onSelectTerritory, currentPlayerId, movementFlow, playerColor, onAnimationComplete }: TerritoryMapProps) {
   const [hoveredTerritory, setHoveredTerritory] = useState<string | null>(null);
 
   const getFaction = (donoId: string | null) => {
@@ -56,13 +61,22 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
     ...t, partida_id: '', dono_id: null, forca: 50,
   }));
 
+  const isInMoveMode = movementFlow.state === 'quantity_selected';
+  const moveOriginNeighbors = useMemo(() => {
+    if (!isInMoveMode || !movementFlow.originId) return new Set<string>();
+    const t = TERRITORIES.find(t => t.id === movementFlow.originId);
+    return new Set(t?.vizinhos || []);
+  }, [isInMoveMode, movementFlow.originId]);
+
   const selectedNeighbors = useMemo(() => {
+    if (isInMoveMode) return moveOriginNeighbors;
     if (!selectedTerritory) return new Set<string>();
     const t = TERRITORIES.find(t => t.id === selectedTerritory);
     return new Set(t?.vizinhos || []);
-  }, [selectedTerritory]);
+  }, [selectedTerritory, isInMoveMode, moveOriginNeighbors]);
 
-  // Region labels
+  const effectiveSelected = isInMoveMode ? movementFlow.originId : selectedTerritory;
+
   const regionLabels = useMemo(() => {
     const regions: Record<string, { xs: number[]; ys: number[] }> = {};
     for (const t of TERRITORIES) {
@@ -77,17 +91,30 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
     }));
   }, []);
 
+  // Hover preview line for destination during move mode
+  const hoverPreviewLine = useMemo(() => {
+    if (!isInMoveMode || !hoveredTerritory || !movementFlow.originId) return null;
+    if (!moveOriginNeighbors.has(hoveredTerritory)) return null;
+    const origin = TERRITORIES.find(t => t.id === movementFlow.originId);
+    const dest = TERRITORIES.find(t => t.id === hoveredTerritory);
+    if (!origin || !dest) return null;
+    const mx = (origin.pos_x + dest.pos_x) / 2;
+    const my = (origin.pos_y + dest.pos_y) / 2;
+    const dx = dest.pos_x - origin.pos_x;
+    const dy = dest.pos_y - origin.pos_y;
+    const cx = mx - dy * 0.15;
+    const cy = my + dx * 0.15;
+    return { path: `M ${origin.pos_x} ${origin.pos_y} Q ${cx} ${cy} ${dest.pos_x} ${dest.pos_y}`, dest };
+  }, [isInMoveMode, hoveredTerritory, movementFlow.originId, moveOriginNeighbors]);
+
   return (
-    <div className="relative w-full h-full min-h-[600px] rounded-xl overflow-hidden" data-tutorial="map">
-      {/* Layer 1: Background */}
+    <div className="relative w-full h-full min-h-[600px] rounded-xl overflow-hidden">
       <img src={mapBg} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: 'blur(2px)' }} />
-      {/* Layer 2: Dark overlay */}
       <div className="absolute inset-0 bg-background/65" />
 
       <svg viewBox="0 0 950 800" className="relative w-full h-full z-10" preserveAspectRatio="xMidYMid meet">
         <MapDefs />
 
-        {/* Region labels */}
         {regionLabels.map(({ regiao, x, y }) => (
           <text key={regiao} x={x} y={y} textAnchor="middle" fill={REGION_COLORS[regiao] || '#888'}
             fontSize="11" fontFamily="Cinzel, serif" letterSpacing="3" opacity={0.5}>
@@ -95,21 +122,30 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
           </text>
         ))}
 
-        {/* Layer 3: Connection lines */}
-        <ConnectionLines selectedTerritory={selectedTerritory} selectedNeighbors={selectedNeighbors} />
+        <ConnectionLines selectedTerritory={effectiveSelected} selectedNeighbors={selectedNeighbors} />
 
-        {/* Layer 4+5: Territories */}
+        {/* Hover preview dashed line */}
+        {hoverPreviewLine && (
+          <g>
+            <path d={hoverPreviewLine.path} fill="none" stroke={playerColor} strokeWidth={2}
+              strokeDasharray="8,5" opacity={0.5} filter="url(#glow-soft)" />
+            <circle cx={hoverPreviewLine.dest.pos_x} cy={hoverPreviewLine.dest.pos_y} r={44}
+              fill="none" stroke={playerColor} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.35} />
+          </g>
+        )}
+
         {displayTerritories.map((t, idx) => {
           const def = TERRITORIES.find(d => d.id === t.id);
           const regiao = (t as any).regiao || def?.regiao || 'centro';
           const tipo = (t as any).tipo || def?.tipo || 'comum';
           const faction = getFaction(t.dono_id);
           const color = getPlayerColor(t.dono_id);
-          const isSelected = selectedTerritory === t.id;
+          const isSelected = effectiveSelected === t.id;
           const isHovered = hoveredTerritory === t.id;
           const isNeighbor = selectedNeighbors.has(t.id);
-          const dimmed = selectedTerritory && !isSelected && !isNeighbor;
+          const dimmed = effectiveSelected && !isSelected && !isNeighbor;
           const isEnemy = t.dono_id && t.dono_id !== currentPlayerId;
+          const isMoveTarget = isInMoveMode && isNeighbor;
           const outerR = 38;
           const seed = idx * 3.7;
           const px = def?.pos_x ?? t.pos_x;
@@ -123,46 +159,41 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
               className="cursor-pointer"
               style={{ transition: 'opacity 0.3s', opacity: dimmed ? 0.2 : 1 }}>
 
-              {/* Spice particles */}
               <SpiceParticles x={px} y={py} production={t.producao_spice} tipo={tipo} />
 
-              {/* Territory base shape */}
               <motion.path d={getTerritoryPath(px, py, outerR, seed)}
-                fill={color} fillOpacity={isSelected ? 0.35 : isHovered ? 0.25 : 0.12}
-                stroke={isSelected ? '#C4A35A' : isNeighbor && selectedTerritory ? 'hsl(38, 50%, 50%)' : color}
-                strokeWidth={isSelected ? 3 : isHovered ? 2 : 1}
+                fill={color} fillOpacity={isSelected ? 0.35 : isMoveTarget && isHovered ? 0.3 : isHovered ? 0.25 : 0.12}
+                stroke={isSelected ? '#C4A35A' : isMoveTarget ? 'hsl(120, 40%, 50%)' : isNeighbor && effectiveSelected ? 'hsl(38, 50%, 50%)' : color}
+                strokeWidth={isSelected ? 3 : isMoveTarget ? 2 : isHovered ? 2 : 1}
                 filter={isSelected ? 'url(#glow-selected)' : isHovered ? 'url(#glow-hover)' : undefined}
                 animate={{ scale: isSelected ? 1.1 : isHovered ? 1.04 : 1 }}
                 style={{ transformOrigin: `${px}px ${py}px` }}
                 transition={{ type: 'spring', stiffness: 300, damping: 25 }} />
 
-              {/* Enemy red tint on hover */}
-              {isHovered && isEnemy && (
+              {isHovered && isEnemy && !isInMoveMode && (
                 <path d={getTerritoryPath(px, py, outerR, seed)}
                   fill="hsl(0, 70%, 50%)" fillOpacity={0.12} pointerEvents="none" />
               )}
 
-              {/* Faction banner */}
+              {/* Green highlight for valid move targets */}
+              {isMoveTarget && (
+                <motion.path d={getTerritoryPath(px, py, outerR + 4, seed)}
+                  fill="none" stroke="hsl(120, 40%, 50%)" strokeWidth={1.5} strokeDasharray="6,4"
+                  animate={{ opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 1.5 }} />
+              )}
+
               {faction && t.dono_id && (
                 <FactionBanner x={px} y={py} faction={faction} />
               )}
 
-              {/* Troop pin (replaces old circle+number) */}
-              <TroopPin
-                x={px} y={py}
-                forca={t.forca}
-                faction={faction}
-                isSelected={isSelected}
-                defesaBase={t.defesa_base}
-              />
+              <TroopPin x={px} y={py} forca={t.forca} faction={faction} isSelected={isSelected} defesaBase={t.defesa_base} />
 
-              {/* Territory name */}
               <text x={px} y={py + outerR + 16} textAnchor="middle" fill="hsl(38, 25%, 70%)"
                 fontSize="8" fontFamily="Cinzel, serif" letterSpacing="0.5">
                 {t.nome}
               </text>
 
-              {/* Spice production indicator */}
               <text x={px} y={py - outerR - 8} textAnchor="middle"
                 fill={tipo === 'rico' ? 'hsl(45, 80%, 65%)' : 'hsl(210, 70%, 65%)'}
                 fontSize="9" fontFamily="Rajdhani, sans-serif" filter="url(#glow-soft)">
@@ -171,11 +202,22 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
             </g>
           );
         })}
+
+        {/* Movement animation layer */}
+        {movementFlow.state === 'animating' && movementFlow.originId && movementFlow.destinationId && (
+          <MovementAnimation
+            originId={movementFlow.originId}
+            destinationId={movementFlow.destinationId}
+            quantity={movementFlow.quantity}
+            playerColor={playerColor}
+            onComplete={onAnimationComplete}
+          />
+        )}
       </svg>
 
       {/* Tooltip */}
       <AnimatePresence>
-        {hoveredTerritory && !selectedTerritory && (() => {
+        {hoveredTerritory && !effectiveSelected && !isInMoveMode && (() => {
           const t = displayTerritories.find(t => t.id === hoveredTerritory);
           if (!t) return null;
           const def = TERRITORIES.find(d => d.id === t.id);
@@ -211,7 +253,14 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
         })()}
       </AnimatePresence>
 
-      {/* Legend panel */}
+      {/* Move mode indicator */}
+      {isInMoveMode && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          className="absolute top-3 left-1/2 -translate-x-1/2 bg-primary/90 text-primary-foreground px-4 py-1.5 rounded-full text-xs font-display tracking-widest z-20">
+          SELECIONE O DESTINO
+        </motion.div>
+      )}
+
       <MapLegend playerEstados={playerEstados} />
     </div>
   );
