@@ -51,7 +51,15 @@ export default function GamePage() {
     const terr = territories.find(t => t.id === selectedTerritory);
     if (!terr || terr.dono_id !== player?.id) return;
     selectOrigin(selectedTerritory, terr.forca);
-    selectAction();
+    selectAction('mover');
+  }, [selectedTerritory, territories, player?.id, selectOrigin, selectAction]);
+
+  const handleStartAttack = useCallback(() => {
+    if (!selectedTerritory) return;
+    const terr = territories.find(t => t.id === selectedTerritory);
+    if (!terr || terr.dono_id !== player?.id) return;
+    selectOrigin(selectedTerritory, terr.forca);
+    selectAction('atacar');
   }, [selectedTerritory, territories, player?.id, selectOrigin, selectAction]);
 
   const handleConfirmMove = useCallback(async () => {
