@@ -71,7 +71,7 @@ export default function GamePage() {
       turno_id: turnoId,
       player_id: player.id,
       partida_id: partidaId,
-      tipo: 'mover' as const,
+      tipo: (flow.actionType || 'mover') as 'mover' | 'atacar',
       origem_id: flow.originId,
       destino_id: flow.destinationId,
       quantidade: flow.quantity,
