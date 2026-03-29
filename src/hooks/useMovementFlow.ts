@@ -58,7 +58,11 @@ export function useMovementFlow() {
   }, []);
 
   const selectDestination = useCallback((id: string) => {
-    setFlow(prev => ({ ...prev, destinationId: id, state: 'confirming' }));
+    setFlow(prev => ({
+      ...prev,
+      destinationId: id,
+      state: prev.actionType === 'atacar' ? 'attack_preview' : 'confirming',
+    }));
   }, []);
 
   const startAnimation = useCallback(() => {
