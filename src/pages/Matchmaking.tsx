@@ -1,132 +1,122 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlayer } from '@/hooks/usePlayer';
-import { TERRITORIES, PLAYER_COLORS } from '@/lib/gameConstants';
 import { motion } from 'framer-motion';
-import { Loader2, LogOut, Users } from 'lucide-react';
+import { LogOut, Plus, KeyRound } from 'lucide-react';
+import { toast } from 'sonner';
+
+function generateCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
 
 export default function Matchmaking() {
   const { user, signOut } = useAuth();
   const { player } = usePlayer(user?.id);
   const navigate = useNavigate();
-  const [inQueue, setInQueue] = useState(false);
-  const [queueCount, setQueueCount] = useState(0);
-  const [searching, setSearching] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [showJoin, setShowJoin] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [turnTime, setTurnTime] = useState(60);
+  const [maxPlayers, setMaxPlayers] = useState(4);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchQueue = async () => {
-      const { count } = await supabase
-        .from('matchmaking_queue')
-        .select('*', { count: 'exact', head: true });
-      setQueueCount(count || 0);
-    };
-    fetchQueue();
-    const channel = supabase
-      .channel('queue-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matchmaking_queue' }, () => fetchQueue())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  useEffect(() => {
+  const handleCreate = async () => {
     if (!player) return;
-    const checkActiveGame = async () => {
-      const { data } = await supabase
-        .from('player_estado')
-        .select('partida_id, partidas(status)')
-        .eq('player_id', player.id)
-        .eq('ativo', true);
-      if (data && data.length > 0) {
-        const active = data.find((d: any) => d.partidas?.status === 'in_progress');
-        if (active) navigate(`/game/${active.partida_id}`);
-      }
-    };
-    checkActiveGame();
-  }, [player, navigate]);
-
-  useEffect(() => {
-    if (!player || !inQueue) return;
-    const channel = supabase
-      .channel('match-created')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'player_estado', filter: `player_id=eq.${player.id}` },
-        (payload: any) => {
-          if (payload.new?.partida_id) navigate(`/game/${payload.new.partida_id}`);
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [player, inQueue, navigate]);
-
-  const joinQueue = async () => {
-    if (!player) return;
-    setSearching(true);
-    await supabase.from('matchmaking_queue').upsert({ player_id: player.id });
-    setInQueue(true);
-    const { data: queuePlayers } = await supabase
-      .from('matchmaking_queue')
-      .select('player_id')
-      .order('joined_at', { ascending: true })
-      .limit(4);
-    if (queuePlayers && queuePlayers.length >= 2) {
-      await createMatch(queuePlayers.map(q => q.player_id));
-    }
-  };
-
-  const createMatch = async (playerIds: string[]) => {
-    const { data: partida } = await supabase
+    setLoading(true);
+    const code = generateCode();
+    const { data, error } = await supabase
       .from('partidas')
-      .insert({ status: 'in_progress', turno_atual: 1, max_jogadores: playerIds.length })
+      .insert({
+        status: 'waiting' as const,
+        turno_atual: 0,
+        max_jogadores: maxPlayers,
+        code,
+        host_id: player.id,
+        turn_time: turnTime,
+        map: 'arrakis',
+      })
       .select()
       .single();
-    if (!partida) return;
 
-    const estados = playerIds.map((pid, i) => ({
-      partida_id: partida.id,
-      player_id: pid,
+    if (error || !data) {
+      toast.error('Erro ao criar partida');
+      setLoading(false);
+      return;
+    }
+
+    // Host joins as first player
+    await supabase.from('player_estado').insert({
+      partida_id: data.id,
+      player_id: player.id,
       spice: 0,
       acoes_restantes: 2,
-      cor: PLAYER_COLORS[i % PLAYER_COLORS.length],
-    }));
-    await supabase.from('player_estado').insert(estados);
-
-    // Distribute 20 territories among players
-    const shuffledTerritories = [...TERRITORIES].sort(() => Math.random() - 0.5);
-    const terrInserts = shuffledTerritories.map((t, i) => ({
-      id: t.id,
-      partida_id: partida.id,
-      nome: t.nome,
-      dono_id: playerIds[i % playerIds.length],
-      forca: 50,
-      producao_spice: t.producao_spice,
-      defesa_base: t.defesa_base,
-      vizinhos: t.vizinhos,
-      pos_x: t.pos_x,
-      pos_y: t.pos_y,
-      regiao: t.regiao,
-      tipo: t.tipo,
-    }));
-    await supabase.from('territorios').insert(terrInserts);
-
-    await supabase.from('turnos').insert({ partida_id: partida.id, numero: 1 });
-    await supabase.from('matchmaking_queue').delete().in('player_id', playerIds);
-    await supabase.from('game_logs').insert({
-      partida_id: partida.id,
-      turno_numero: 1,
-      nivel: 'publico',
-      mensagem: `Partida iniciada com ${playerIds.length} jogadores! 20 territórios em disputa.`,
+      cor: '#C4A35A',
     });
-    navigate(`/game/${partida.id}`);
+
+    setLoading(false);
+    navigate(`/lobby/${data.id}`);
   };
 
-  const leaveQueue = async () => {
-    if (!player) return;
-    await supabase.from('matchmaking_queue').delete().eq('player_id', player.id);
-    setInQueue(false);
-    setSearching(false);
+  const handleJoin = async () => {
+    if (!player || !joinCode.trim()) return;
+    setLoading(true);
+    const { data: partida } = await supabase
+      .from('partidas')
+      .select('*')
+      .eq('code', joinCode.trim().toUpperCase())
+      .single();
+
+    if (!partida || partida.status !== 'waiting') {
+      toast.error('Partida inválida ou já iniciada');
+      setLoading(false);
+      return;
+    }
+
+    // Check if already joined
+    const { data: existing } = await supabase
+      .from('player_estado')
+      .select('id')
+      .eq('partida_id', partida.id)
+      .eq('player_id', player.id);
+
+    if (existing && existing.length > 0) {
+      setLoading(false);
+      navigate(`/lobby/${partida.id}`);
+      return;
+    }
+
+    // Check player count
+    const { count } = await supabase
+      .from('player_estado')
+      .select('*', { count: 'exact', head: true })
+      .eq('partida_id', partida.id);
+
+    if ((count || 0) >= partida.max_jogadores) {
+      toast.error('Partida lotada');
+      setLoading(false);
+      return;
+    }
+
+    await supabase.from('player_estado').insert({
+      partida_id: partida.id,
+      player_id: player.id,
+      spice: 0,
+      acoes_restantes: 2,
+      cor: '#C4A35A',
+    });
+
+    setLoading(false);
+    navigate(`/lobby/${partida.id}`);
   };
+
+  const turnOptions = [30, 60, 90, 120, 180];
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -135,35 +125,89 @@ export default function Matchmaking() {
           <h1 className="text-display text-5xl text-primary tracking-[0.25em]">ARRAKIS</h1>
           <p className="text-muted-foreground font-body text-lg">Guerra pela Especiaria</p>
         </div>
-        <div className="border-glow rounded-lg p-8 space-y-6">
-          <div className="flex items-center justify-center gap-2 text-sand">
-            <Users className="w-5 h-5" />
-            <span className="font-body text-lg">{queueCount} na fila</span>
-          </div>
-          {!inQueue ? (
-            <Button onClick={joinQueue} disabled={!player} className="w-full h-14 text-lg font-display tracking-[0.15em]">
-              Encontrar Partida
+
+        {!showCreate && !showJoin && (
+          <div className="border-glow rounded-lg p-8 space-y-4">
+            <Button onClick={() => setShowCreate(true)} disabled={!player} className="w-full h-14 text-lg font-display tracking-[0.15em]">
+              <Plus className="w-5 h-5 mr-2" /> Criar Partida
             </Button>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-center gap-3">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                <span className="font-body text-foreground text-lg">Procurando oponentes...</span>
+            <Button onClick={() => setShowJoin(true)} disabled={!player} variant="outline" className="w-full h-14 text-lg font-display tracking-[0.15em]">
+              <KeyRound className="w-5 h-5 mr-2" /> Entrar com Código
+            </Button>
+            {player && (
+              <div className="pt-4 border-t border-border">
+                <p className="text-sm text-muted-foreground font-body">
+                  Jogando como <span className="text-primary">{player.display_name}</span>
+                </p>
+                <p className="text-xs text-muted-foreground font-body mt-1">
+                  Vitórias: {player.games_won} | Partidas: {player.games_played}
+                </p>
               </div>
-              <Button onClick={leaveQueue} variant="outline" className="font-body">Cancelar</Button>
+            )}
+          </div>
+        )}
+
+        {showCreate && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="border-glow rounded-lg p-8 space-y-6 text-left">
+            <h2 className="text-display text-2xl text-primary tracking-[0.1em] text-center">Configurar Partida</h2>
+
+            <div className="space-y-2">
+              <label className="text-sm font-body text-muted-foreground">Tempo por turno</label>
+              <div className="flex gap-2 flex-wrap">
+                {turnOptions.map(t => (
+                  <Button key={t} variant={turnTime === t ? 'default' : 'outline'} size="sm" onClick={() => setTurnTime(t)} className="font-body">
+                    {t}s
+                  </Button>
+                ))}
+              </div>
             </div>
-          )}
-          {player && (
-            <div className="pt-4 border-t border-border">
-              <p className="text-sm text-muted-foreground font-body">
-                Jogando como <span className="text-primary">{player.display_name}</span>
-              </p>
-              <p className="text-xs text-muted-foreground font-body mt-1">
-                Vitórias: {player.games_won} | Partidas: {player.games_played}
-              </p>
+
+            <div className="space-y-2">
+              <label className="text-sm font-body text-muted-foreground">Jogadores (máx)</label>
+              <div className="flex gap-2">
+                {[2, 3, 4].map(n => (
+                  <Button key={n} variant={maxPlayers === n ? 'default' : 'outline'} size="sm" onClick={() => setMaxPlayers(n)} className="font-body">
+                    {n}
+                  </Button>
+                ))}
+              </div>
             </div>
-          )}
-        </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-body text-muted-foreground">Mapa</label>
+              <div className="flex gap-2">
+                <Button variant="default" size="sm" className="font-body" disabled>Arrakis (Padrão)</Button>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button onClick={() => setShowCreate(false)} variant="outline" className="flex-1 font-body">Voltar</Button>
+              <Button onClick={handleCreate} disabled={loading} className="flex-1 font-body">
+                {loading ? 'Criando...' : 'Criar Partida'}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {showJoin && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="border-glow rounded-lg p-8 space-y-6">
+            <h2 className="text-display text-2xl text-primary tracking-[0.1em]">Entrar na Partida</h2>
+            <Input
+              placeholder="Código da partida (ex: A7K9XZ)"
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value.toUpperCase())}
+              maxLength={6}
+              className="text-center text-2xl tracking-[0.3em] font-display h-14"
+            />
+            <div className="flex gap-3">
+              <Button onClick={() => { setShowJoin(false); setJoinCode(''); }} variant="outline" className="flex-1 font-body">Voltar</Button>
+              <Button onClick={handleJoin} disabled={loading || joinCode.length < 6} className="flex-1 font-body">
+                {loading ? 'Entrando...' : 'Entrar'}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
         <Button onClick={signOut} variant="ghost" size="sm" className="text-muted-foreground font-body">
           <LogOut className="w-4 h-4 mr-2" /> Sair
         </Button>
