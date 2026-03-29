@@ -62,6 +62,7 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
   }));
 
   const isInMoveMode = movementFlow.state === 'quantity_selected';
+  const isAttackMode = isInMoveMode && movementFlow.actionType === 'atacar';
   const moveOriginNeighbors = useMemo(() => {
     if (!isInMoveMode || !movementFlow.originId) return new Set<string>();
     const t = TERRITORIES.find(t => t.id === movementFlow.originId);
