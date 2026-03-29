@@ -128,10 +128,13 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
         {/* Hover preview dashed line */}
         {hoverPreviewLine && (
           <g>
-            <path d={hoverPreviewLine.path} fill="none" stroke={playerColor} strokeWidth={2}
-              strokeDasharray="8,5" opacity={0.5} filter="url(#glow-soft)" />
+            <path d={hoverPreviewLine.path} fill="none"
+              stroke={isAttackMode ? 'hsl(0, 70%, 50%)' : playerColor}
+              strokeWidth={isAttackMode ? 3 : 2}
+              strokeDasharray={isAttackMode ? '12,6' : '8,5'} opacity={0.6} filter="url(#glow-soft)" />
             <circle cx={hoverPreviewLine.dest.pos_x} cy={hoverPreviewLine.dest.pos_y} r={44}
-              fill="none" stroke={playerColor} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.35} />
+              fill="none" stroke={isAttackMode ? 'hsl(0, 70%, 50%)' : playerColor}
+              strokeWidth={1.5} strokeDasharray="6,4" opacity={0.35} />
           </g>
         )}
 
