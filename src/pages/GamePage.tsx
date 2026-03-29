@@ -145,6 +145,7 @@ export default function GamePage() {
             playerId={player?.id || null}
             partidaId={partidaId || null}
             turnoId={turnoId}
+            onAction={refetch}
             onStartAttack={handleStartAttack}
             movementFlow={flow}
             onStartMove={handleStartMove}
