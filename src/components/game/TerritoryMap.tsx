@@ -62,6 +62,7 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
   }));
 
   const isInMoveMode = movementFlow.state === 'quantity_selected';
+  const isAttackMode = isInMoveMode && movementFlow.actionType === 'atacar';
   const moveOriginNeighbors = useMemo(() => {
     if (!isInMoveMode || !movementFlow.originId) return new Set<string>();
     const t = TERRITORIES.find(t => t.id === movementFlow.originId);
@@ -95,6 +96,11 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
   const hoverPreviewLine = useMemo(() => {
     if (!isInMoveMode || !hoveredTerritory || !movementFlow.originId) return null;
     if (!moveOriginNeighbors.has(hoveredTerritory)) return null;
+    // For attack mode, only show preview to enemy territories
+    if (isAttackMode) {
+      const ht = territories.find(t => t.id === hoveredTerritory);
+      if (!ht || !ht.dono_id || ht.dono_id === currentPlayerId) return null;
+    }
     const origin = TERRITORIES.find(t => t.id === movementFlow.originId);
     const dest = TERRITORIES.find(t => t.id === hoveredTerritory);
     if (!origin || !dest) return null;
@@ -105,7 +111,7 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
     const cx = mx - dy * 0.15;
     const cy = my + dx * 0.15;
     return { path: `M ${origin.pos_x} ${origin.pos_y} Q ${cx} ${cy} ${dest.pos_x} ${dest.pos_y}`, dest };
-  }, [isInMoveMode, hoveredTerritory, movementFlow.originId, moveOriginNeighbors]);
+  }, [isInMoveMode, isAttackMode, hoveredTerritory, movementFlow.originId, moveOriginNeighbors, territories, currentPlayerId]);
 
   return (
     <div className="relative w-full h-full min-h-[600px] rounded-xl overflow-hidden">
@@ -127,10 +133,13 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
         {/* Hover preview dashed line */}
         {hoverPreviewLine && (
           <g>
-            <path d={hoverPreviewLine.path} fill="none" stroke={playerColor} strokeWidth={2}
-              strokeDasharray="8,5" opacity={0.5} filter="url(#glow-soft)" />
+            <path d={hoverPreviewLine.path} fill="none"
+              stroke={isAttackMode ? 'hsl(0, 70%, 50%)' : playerColor}
+              strokeWidth={isAttackMode ? 3 : 2}
+              strokeDasharray={isAttackMode ? '12,6' : '8,5'} opacity={0.6} filter="url(#glow-soft)" />
             <circle cx={hoverPreviewLine.dest.pos_x} cy={hoverPreviewLine.dest.pos_y} r={44}
-              fill="none" stroke={playerColor} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.35} />
+              fill="none" stroke={isAttackMode ? 'hsl(0, 70%, 50%)' : playerColor}
+              strokeWidth={1.5} strokeDasharray="6,4" opacity={0.35} />
           </g>
         )}
 
@@ -146,6 +155,8 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
           const dimmed = effectiveSelected && !isSelected && !isNeighbor;
           const isEnemy = t.dono_id && t.dono_id !== currentPlayerId;
           const isMoveTarget = isInMoveMode && isNeighbor;
+          const isAttackTarget = isAttackMode && isNeighbor && t.dono_id && t.dono_id !== currentPlayerId;
+          const isMoveOnly = isMoveTarget && !isAttackMode && (!t.dono_id || t.dono_id === currentPlayerId);
           const outerR = 38;
           const seed = idx * 3.7;
           const px = def?.pos_x ?? t.pos_x;
@@ -162,10 +173,10 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
               <SpiceParticles x={px} y={py} production={t.producao_spice} tipo={tipo} />
 
               <motion.path d={getTerritoryPath(px, py, outerR, seed)}
-                fill={color} fillOpacity={isSelected ? 0.35 : isMoveTarget && isHovered ? 0.3 : isHovered ? 0.25 : 0.12}
-                stroke={isSelected ? '#C4A35A' : isMoveTarget ? 'hsl(120, 40%, 50%)' : isNeighbor && effectiveSelected ? 'hsl(38, 50%, 50%)' : color}
-                strokeWidth={isSelected ? 3 : isMoveTarget ? 2 : isHovered ? 2 : 1}
-                filter={isSelected ? 'url(#glow-selected)' : isHovered ? 'url(#glow-hover)' : undefined}
+                fill={color} fillOpacity={isSelected ? 0.35 : isAttackTarget && isHovered ? 0.35 : isMoveOnly && isHovered ? 0.3 : isHovered ? 0.25 : 0.12}
+                stroke={isSelected ? '#C4A35A' : isAttackTarget ? 'hsl(0, 60%, 50%)' : isMoveOnly ? 'hsl(120, 40%, 50%)' : isNeighbor && effectiveSelected ? 'hsl(38, 50%, 50%)' : color}
+                strokeWidth={isSelected ? 3 : isAttackTarget ? 2.5 : isMoveOnly ? 2 : isHovered ? 2 : 1}
+                filter={isSelected ? 'url(#glow-selected)' : isAttackTarget && isHovered ? 'url(#glow-hover)' : isHovered ? 'url(#glow-hover)' : undefined}
                 animate={{ scale: isSelected ? 1.1 : isHovered ? 1.04 : 1 }}
                 style={{ transformOrigin: `${px}px ${py}px` }}
                 transition={{ type: 'spring', stiffness: 300, damping: 25 }} />
@@ -176,11 +187,20 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
               )}
 
               {/* Green highlight for valid move targets */}
-              {isMoveTarget && (
+              {isMoveOnly && (
                 <motion.path d={getTerritoryPath(px, py, outerR + 4, seed)}
                   fill="none" stroke="hsl(120, 40%, 50%)" strokeWidth={1.5} strokeDasharray="6,4"
                   animate={{ opacity: [0.3, 0.6, 0.3] }}
                   transition={{ repeat: Infinity, duration: 1.5 }} />
+              )}
+
+              {/* Red pulsing highlight for attack targets */}
+              {isAttackTarget && (
+                <motion.path d={getTerritoryPath(px, py, outerR + 4, seed)}
+                  fill="hsl(0, 60%, 50%)" fillOpacity={0.08}
+                  stroke="hsl(0, 60%, 50%)" strokeWidth={2} strokeDasharray="8,4"
+                  animate={{ opacity: [0.4, 0.8, 0.4] }}
+                  transition={{ repeat: Infinity, duration: 1 }} />
               )}
 
               {faction && t.dono_id && (
@@ -256,8 +276,8 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
       {/* Move mode indicator */}
       {isInMoveMode && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="absolute top-3 left-1/2 -translate-x-1/2 bg-primary/90 text-primary-foreground px-4 py-1.5 rounded-full text-xs font-display tracking-widest z-20">
-          SELECIONE O DESTINO
+          className={`absolute top-3 left-1/2 -translate-x-1/2 ${isAttackMode ? 'bg-destructive/90' : 'bg-primary/90'} text-primary-foreground px-4 py-1.5 rounded-full text-xs font-display tracking-widest z-20`}>
+          {isAttackMode ? 'SELECIONE O ALVO' : 'SELECIONE O DESTINO'}
         </motion.div>
       )}
 

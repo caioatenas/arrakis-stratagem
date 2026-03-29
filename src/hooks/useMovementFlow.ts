@@ -7,6 +7,7 @@ export type MovementState =
   | 'quantity_selected'
   | 'destination_selected'
   | 'confirming'
+  | 'attack_preview'
   | 'animating';
 
 export interface MovementFlow {
@@ -15,7 +16,7 @@ export interface MovementFlow {
   destinationId: string | null;
   quantity: number;
   maxQuantity: number;
-  actionType: 'mover' | null;
+  actionType: 'mover' | 'atacar' | null;
 }
 
 export function useMovementFlow() {
@@ -40,8 +41,8 @@ export function useMovementFlow() {
     });
   }, []);
 
-  const selectAction = useCallback(() => {
-    setFlow(prev => ({ ...prev, state: 'action_selected', actionType: 'mover' }));
+  const selectAction = useCallback((type: 'mover' | 'atacar' = 'mover') => {
+    setFlow(prev => ({ ...prev, state: 'action_selected', actionType: type }));
   }, []);
 
   const setQuantity = useCallback((q: number) => {
@@ -57,7 +58,11 @@ export function useMovementFlow() {
   }, []);
 
   const selectDestination = useCallback((id: string) => {
-    setFlow(prev => ({ ...prev, destinationId: id, state: 'confirming' }));
+    setFlow(prev => ({
+      ...prev,
+      destinationId: id,
+      state: prev.actionType === 'atacar' ? 'attack_preview' : 'confirming',
+    }));
   }, []);
 
   const startAnimation = useCallback(() => {

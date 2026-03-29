@@ -24,26 +24,42 @@ export default function GamePage() {
   const myEstado = playerEstados.find(pe => pe.player_id === player?.id) || null;
 
   const handleSelectTerritory = useCallback((id: string) => {
-    // If in movement flow waiting for destination, treat click as destination selection
+    // If in movement/attack flow waiting for destination
     if (flow.state === 'quantity_selected') {
       const originTerr = territories.find(t => t.id === flow.originId);
       const destTerr = territories.find(t => t.id === id);
-      if (originTerr && destTerr && originTerr.vizinhos.includes(id) && (!destTerr.dono_id || destTerr.dono_id === player?.id)) {
-        selectDestination(id);
-        return;
+      if (!originTerr || !destTerr || !originTerr.vizinhos.includes(id)) return;
+
+      if (flow.actionType === 'atacar') {
+        // Attack: destination must be enemy
+        if (destTerr.dono_id && destTerr.dono_id !== player?.id) {
+          selectDestination(id);
+        }
+      } else {
+        // Move: destination must be own or neutral
+        if (!destTerr.dono_id || destTerr.dono_id === player?.id) {
+          selectDestination(id);
+        }
       }
-      // Invalid destination — ignore
       return;
     }
     setSelectedTerritory(id);
-  }, [flow.state, flow.originId, territories, player?.id, selectDestination]);
+  }, [flow.state, flow.originId, flow.actionType, territories, player?.id, selectDestination]);
 
   const handleStartMove = useCallback(() => {
     if (!selectedTerritory) return;
     const terr = territories.find(t => t.id === selectedTerritory);
     if (!terr || terr.dono_id !== player?.id) return;
     selectOrigin(selectedTerritory, terr.forca);
-    selectAction();
+    selectAction('mover');
+  }, [selectedTerritory, territories, player?.id, selectOrigin, selectAction]);
+
+  const handleStartAttack = useCallback(() => {
+    if (!selectedTerritory) return;
+    const terr = territories.find(t => t.id === selectedTerritory);
+    if (!terr || terr.dono_id !== player?.id) return;
+    selectOrigin(selectedTerritory, terr.forca);
+    selectAction('atacar');
   }, [selectedTerritory, territories, player?.id, selectOrigin, selectAction]);
 
   const handleConfirmMove = useCallback(async () => {
@@ -55,7 +71,7 @@ export default function GamePage() {
       turno_id: turnoId,
       player_id: player.id,
       partida_id: partidaId,
-      tipo: 'mover' as const,
+      tipo: (flow.actionType || 'mover') as 'mover' | 'atacar',
       origem_id: flow.originId,
       destino_id: flow.destinationId,
       quantidade: flow.quantity,
@@ -130,6 +146,7 @@ export default function GamePage() {
             partidaId={partidaId || null}
             turnoId={turnoId}
             onAction={refetch}
+            onStartAttack={handleStartAttack}
             movementFlow={flow}
             onStartMove={handleStartMove}
             onSetQuantity={setQuantity}

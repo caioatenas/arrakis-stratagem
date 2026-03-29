@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Territory, PlayerEstado } from '@/hooks/useGameState';
 import type { MovementFlow } from '@/hooks/useMovementFlow';
 import { ACTION_LABELS } from '@/lib/gameConstants';
+import { CombatPreview } from './CombatPreview';
 import { Swords, Shield, Eye, Move, Gem, ArrowRight, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -20,6 +21,7 @@ interface ActionPanelProps {
   onAction: () => void;
   movementFlow: MovementFlow;
   onStartMove: () => void;
+  onStartAttack: () => void;
   onSetQuantity: (q: number) => void;
   onConfirmQuantity: () => void;
   onSelectDestination: (id: string) => void;
@@ -37,7 +39,7 @@ const ACTION_ICONS: Record<ActionType, React.ReactNode> = {
 
 export function ActionPanel({
   selectedTerritory, territories, playerEstado, playerId, partidaId, turnoId, onAction,
-  movementFlow, onStartMove, onSetQuantity, onConfirmQuantity, onSelectDestination, onConfirmMove, onCancelMove,
+  movementFlow, onStartMove, onStartAttack, onSetQuantity, onConfirmQuantity, onSelectDestination, onConfirmMove, onCancelMove,
 }: ActionPanelProps) {
   const [selectedAction, setSelectedAction] = useState<ActionType | null>(null);
   const [targetTerritory, setTargetTerritory] = useState<string | null>(null);
@@ -49,16 +51,18 @@ export function ActionPanel({
   const acoes = playerEstado?.acoes_restantes ?? 0;
   const isInMoveFlow = movementFlow.state !== 'idle';
 
-  // === MOVEMENT FLOW UI ===
+  // === MOVEMENT / ATTACK FLOW UI ===
   if (isInMoveFlow) {
     const originTerr = territories.find(t => t.id === movementFlow.originId);
     const destTerr = movementFlow.destinationId ? territories.find(t => t.id === movementFlow.destinationId) : null;
     const remaining = (originTerr?.forca ?? 0) - movementFlow.quantity;
+    const isAttack = movementFlow.actionType === 'atacar';
+    const flowTitle = isAttack ? 'Atacar Território' : 'Mover Tropas';
 
     return (
       <div className="border-glow rounded-lg p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-display text-primary text-lg">Mover Tropas</h3>
+          <h3 className="text-display text-primary text-lg">{flowTitle}</h3>
           <Button variant="ghost" size="icon" onClick={onCancelMove} className="h-7 w-7">
             <X className="w-4 h-4" />
           </Button>
@@ -66,8 +70,8 @@ export function ActionPanel({
 
         {/* Step indicator */}
         <div className="flex items-center gap-1 text-xs font-body">
-          {['Origem', 'Quantidade', 'Destino', 'Confirmar'].map((label, i) => {
-            const stepStates: MovementFlow['state'][] = ['origin_selected', 'action_selected', 'quantity_selected', 'confirming'];
+          {['Origem', 'Quantidade', 'Destino', isAttack ? 'Previsão' : 'Confirmar'].map((label, i) => {
+            const stepStates: MovementFlow['state'][] = ['origin_selected', 'action_selected', 'quantity_selected', isAttack ? 'attack_preview' : 'confirming'];
             const currentIdx = stepStates.indexOf(movementFlow.state);
             const isActive = i <= (currentIdx >= 0 ? currentIdx : 0);
             return (
@@ -90,7 +94,9 @@ export function ActionPanel({
         {/* Step 2: Quantity selection */}
         {(movementFlow.state === 'action_selected' || movementFlow.state === 'origin_selected') && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-            <p className="text-xs text-muted-foreground font-body">Selecione quantas tropas mover:</p>
+            <p className="text-xs text-muted-foreground font-body">
+              {isAttack ? 'Selecione quantas tropas enviar ao ataque:' : 'Selecione quantas tropas mover:'}
+            </p>
 
             {/* Quick buttons */}
             <div className="grid grid-cols-4 gap-1">
@@ -112,17 +118,15 @@ export function ActionPanel({
               ))}
             </div>
 
-            {/* Slider */}
             <Slider
               min={1} max={movementFlow.maxQuantity} step={1}
               value={[movementFlow.quantity]}
               onValueChange={([v]) => onSetQuantity(v)}
             />
 
-            {/* Stats preview */}
             <div className="bg-secondary/20 rounded p-2 text-xs font-body space-y-1">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Movendo:</span>
+                <span className="text-muted-foreground">{isAttack ? 'Enviando:' : 'Movendo:'}</span>
                 <span className="text-primary font-bold text-sm">{movementFlow.quantity}</span>
               </div>
               <div className="flex justify-between">
@@ -144,24 +148,49 @@ export function ActionPanel({
         {/* Step 3: Destination selection */}
         {movementFlow.state === 'quantity_selected' && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
-            <p className="text-xs text-muted-foreground font-body">Clique em um território vizinho no mapa ou selecione abaixo:</p>
+            <p className="text-xs text-muted-foreground font-body">
+              {isAttack
+                ? 'Clique em um território inimigo vizinho para atacar:'
+                : 'Clique em um território vizinho no mapa ou selecione abaixo:'}
+            </p>
             <div className="flex flex-wrap gap-1">
               {neighbors
-                .filter(n => !n.dono_id || n.dono_id === playerId)
+                .filter(n => isAttack
+                  ? (n.dono_id && n.dono_id !== playerId) // Attack: enemy only
+                  : (!n.dono_id || n.dono_id === playerId) // Move: own or neutral
+                )
                 .map(n => (
                   <button key={n.id} onClick={() => onSelectDestination(n.id)}
-                    className="px-3 py-1.5 rounded text-xs font-body transition-all border bg-secondary/50 border-border text-secondary-foreground hover:bg-primary/20 hover:border-primary hover:text-primary">
-                    {n.nome}
+                    className={`px-3 py-1.5 rounded text-xs font-body transition-all border
+                      ${isAttack
+                        ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20 hover:border-destructive'
+                        : 'bg-secondary/50 border-border text-secondary-foreground hover:bg-primary/20 hover:border-primary hover:text-primary'
+                      }`}>
+                    {n.nome} {isAttack && `(${n.forca})`}
                   </button>
                 ))}
             </div>
-            {neighbors.filter(n => !n.dono_id || n.dono_id === playerId).length === 0 && (
-              <p className="text-xs text-destructive font-body">Nenhum destino válido (apenas seus territórios ou neutros).</p>
+            {isAttack && neighbors.filter(n => n.dono_id && n.dono_id !== playerId).length === 0 && (
+              <p className="text-xs text-destructive font-body">Nenhum território inimigo vizinho.</p>
+            )}
+            {!isAttack && neighbors.filter(n => !n.dono_id || n.dono_id === playerId).length === 0 && (
+              <p className="text-xs text-destructive font-body">Nenhum destino válido.</p>
             )}
           </motion.div>
         )}
 
-        {/* Step 4: Confirmation */}
+        {/* Step 4a: Attack Preview */}
+        {movementFlow.state === 'attack_preview' && originTerr && destTerr && (
+          <CombatPreview
+            origin={originTerr}
+            target={destTerr}
+            attackerTroops={movementFlow.quantity}
+            onConfirm={onConfirmMove}
+            onCancel={onCancelMove}
+          />
+        )}
+
+        {/* Step 4b: Move Confirmation */}
         {movementFlow.state === 'confirming' && destTerr && (
           <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="space-y-3">
             <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 text-sm font-body">
@@ -193,7 +222,7 @@ export function ActionPanel({
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-4">
             <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.2 }}
               className="text-primary font-display tracking-widest text-sm">
-              MOVENDO TROPAS...
+              {isAttack ? 'ATACANDO...' : 'MOVENDO TROPAS...'}
             </motion.div>
           </motion.div>
         )}
@@ -204,7 +233,6 @@ export function ActionPanel({
   // === NORMAL ACTION PANEL (non-movement) ===
   const canSubmitNonMove = () => {
     if (!selectedAction || !partidaId || !turnoId || !playerId || acoes <= 0) return false;
-    if (selectedAction === 'atacar' && !targetTerritory) return false;
     if (['fortificar', 'espionar', 'extrair'].includes(selectedAction) && !selectedTerritory) return false;
     return true;
   };
@@ -219,7 +247,7 @@ export function ActionPanel({
       partida_id: partidaId!,
       tipo: selectedAction! as ActionType,
       origem_id: selectedTerritory,
-      destino_id: ['atacar', 'espionar'].includes(selectedAction!) ? targetTerritory : selectedTerritory,
+      destino_id: selectedTerritory,
       quantidade: 0,
     };
 
@@ -256,7 +284,6 @@ export function ActionPanel({
           <div className="grid grid-cols-5 gap-1">
             {(Object.keys(ACTION_LABELS) as ActionType[]).map(action => {
               if (action === 'mover') {
-                // Special: triggers movement flow
                 const disabled = acoes <= 0 || !isOwnTerritory || (currentTerr?.forca ?? 0) < 2;
                 return (
                   <button key={action} onClick={onStartMove} disabled={disabled}
@@ -267,9 +294,18 @@ export function ActionPanel({
                 );
               }
 
-              const disabled = acoes <= 0 ||
-                (['atacar'].includes(action) && !isOwnTerritory) ||
-                (['fortificar', 'extrair'].includes(action) && !isOwnTerritory);
+              if (action === 'atacar') {
+                const disabled = acoes <= 0 || !isOwnTerritory || (currentTerr?.forca ?? 0) < 2;
+                return (
+                  <button key={action} onClick={onStartAttack} disabled={disabled}
+                    className="flex flex-col items-center gap-1 p-2 rounded text-xs transition-all bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20 disabled:opacity-30 disabled:cursor-not-allowed">
+                    {ACTION_ICONS[action]}
+                    <span className="font-body">Atacar</span>
+                  </button>
+                );
+              }
+
+              const disabled = acoes <= 0 || !isOwnTerritory;
 
               return (
                 <button key={action}
@@ -286,25 +322,6 @@ export function ActionPanel({
               );
             })}
           </div>
-
-          {/* Target for attack/spy */}
-          {selectedAction && ['atacar', 'espionar'].includes(selectedAction) && (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Selecione destino:</p>
-              <div className="flex flex-wrap gap-1">
-                {neighbors.map(n => (
-                  <button key={n.id} onClick={() => setTargetTerritory(n.id)}
-                    className={`px-3 py-1 rounded text-xs font-body transition-all
-                      ${targetTerritory === n.id
-                        ? 'bg-accent/30 border border-accent text-accent-foreground'
-                        : 'bg-secondary/50 border border-border text-secondary-foreground hover:bg-secondary'
-                      }`}>
-                    {n.nome}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           <Button onClick={handleSubmitNonMove} disabled={!canSubmitNonMove() || submitting}
             className="w-full font-display tracking-wider">
