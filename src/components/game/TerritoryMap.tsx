@@ -150,6 +150,8 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
           const dimmed = effectiveSelected && !isSelected && !isNeighbor;
           const isEnemy = t.dono_id && t.dono_id !== currentPlayerId;
           const isMoveTarget = isInMoveMode && isNeighbor;
+          const isAttackTarget = isAttackMode && isNeighbor && t.dono_id && t.dono_id !== currentPlayerId;
+          const isMoveOnly = isMoveTarget && !isAttackMode && (!t.dono_id || t.dono_id === currentPlayerId);
           const outerR = 38;
           const seed = idx * 3.7;
           const px = def?.pos_x ?? t.pos_x;
