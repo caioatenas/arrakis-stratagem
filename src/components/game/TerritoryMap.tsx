@@ -271,8 +271,8 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
       {/* Move mode indicator */}
       {isInMoveMode && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="absolute top-3 left-1/2 -translate-x-1/2 bg-primary/90 text-primary-foreground px-4 py-1.5 rounded-full text-xs font-display tracking-widest z-20">
-          SELECIONE O DESTINO
+          className={`absolute top-3 left-1/2 -translate-x-1/2 ${isAttackMode ? 'bg-destructive/90' : 'bg-primary/90'} text-primary-foreground px-4 py-1.5 rounded-full text-xs font-display tracking-widest z-20`}>
+          {isAttackMode ? 'SELECIONE O ALVO' : 'SELECIONE O DESTINO'}
         </motion.div>
       )}
 
