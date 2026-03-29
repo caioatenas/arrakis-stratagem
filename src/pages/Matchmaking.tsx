@@ -67,8 +67,8 @@ export default function Matchmaking() {
   const handleJoin = async () => {
     if (!player || !joinCode.trim()) return;
     setLoading(true);
-    const { data: partida } = await supabase
-      .from('partidas')
+    const { data: partida } = await (supabase
+      .from('partidas') as any)
       .select('*')
       .eq('code', joinCode.trim().toUpperCase())
       .single();
