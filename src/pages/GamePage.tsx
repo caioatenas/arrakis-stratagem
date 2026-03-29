@@ -24,19 +24,27 @@ export default function GamePage() {
   const myEstado = playerEstados.find(pe => pe.player_id === player?.id) || null;
 
   const handleSelectTerritory = useCallback((id: string) => {
-    // If in movement flow waiting for destination, treat click as destination selection
+    // If in movement/attack flow waiting for destination
     if (flow.state === 'quantity_selected') {
       const originTerr = territories.find(t => t.id === flow.originId);
       const destTerr = territories.find(t => t.id === id);
-      if (originTerr && destTerr && originTerr.vizinhos.includes(id) && (!destTerr.dono_id || destTerr.dono_id === player?.id)) {
-        selectDestination(id);
-        return;
+      if (!originTerr || !destTerr || !originTerr.vizinhos.includes(id)) return;
+
+      if (flow.actionType === 'atacar') {
+        // Attack: destination must be enemy
+        if (destTerr.dono_id && destTerr.dono_id !== player?.id) {
+          selectDestination(id);
+        }
+      } else {
+        // Move: destination must be own or neutral
+        if (!destTerr.dono_id || destTerr.dono_id === player?.id) {
+          selectDestination(id);
+        }
       }
-      // Invalid destination — ignore
       return;
     }
     setSelectedTerritory(id);
-  }, [flow.state, flow.originId, territories, player?.id, selectDestination]);
+  }, [flow.state, flow.originId, flow.actionType, territories, player?.id, selectDestination]);
 
   const handleStartMove = useCallback(() => {
     if (!selectedTerritory) return;
