@@ -182,11 +182,20 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
               )}
 
               {/* Green highlight for valid move targets */}
-              {isMoveTarget && (
+              {isMoveOnly && (
                 <motion.path d={getTerritoryPath(px, py, outerR + 4, seed)}
                   fill="none" stroke="hsl(120, 40%, 50%)" strokeWidth={1.5} strokeDasharray="6,4"
                   animate={{ opacity: [0.3, 0.6, 0.3] }}
                   transition={{ repeat: Infinity, duration: 1.5 }} />
+              )}
+
+              {/* Red pulsing highlight for attack targets */}
+              {isAttackTarget && (
+                <motion.path d={getTerritoryPath(px, py, outerR + 4, seed)}
+                  fill="hsl(0, 60%, 50%)" fillOpacity={0.08}
+                  stroke="hsl(0, 60%, 50%)" strokeWidth={2} strokeDasharray="8,4"
+                  animate={{ opacity: [0.4, 0.8, 0.4] }}
+                  transition={{ repeat: Infinity, duration: 1 }} />
               )}
 
               {faction && t.dono_id && (
