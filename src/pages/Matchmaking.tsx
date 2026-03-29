@@ -31,10 +31,10 @@ export default function Matchmaking() {
     if (!player) return;
     setLoading(true);
     const code = generateCode();
-    const { data, error } = await supabase
-      .from('partidas')
+    const { data, error } = await (supabase
+      .from('partidas') as any)
       .insert({
-        status: 'waiting' as const,
+        status: 'waiting',
         turno_atual: 0,
         max_jogadores: maxPlayers,
         code,
