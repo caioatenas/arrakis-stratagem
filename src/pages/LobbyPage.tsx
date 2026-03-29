@@ -68,8 +68,7 @@ export default function LobbyPage() {
       toast.error('Casa já escolhida por outro jogador');
       return;
     }
-    await supabase
-      .from('player_estado')
+    await (supabase.from('player_estado') as any)
       .update({ house: faction.id, cor: faction.color })
       .eq('id', myEstado.id);
   };
