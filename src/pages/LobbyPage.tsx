@@ -87,7 +87,7 @@ export default function LobbyPage() {
     // Assign final colors from house selections
     const updates = lobbyPlayers.map((lp, i) => {
       const faction = FACTIONS.find(f => f.id === lp.house);
-      return supabase.from('player_estado')
+      return (supabase.from('player_estado') as any)
         .update({ cor: faction?.color || PLAYER_COLORS[i], ativo: true })
         .eq('id', lp.id);
     });
