@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import AuthPage from "./pages/AuthPage";
 import Matchmaking from "./pages/Matchmaking";
+import LobbyPage from "./pages/LobbyPage";
 import GamePage from "./pages/GamePage";
 import NotFound from "./pages/NotFound";
 
@@ -33,6 +34,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Matchmaking />} />
+      <Route path="/lobby/:partidaId" element={<LobbyPage />} />
       <Route path="/game/:partidaId" element={<GamePage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
