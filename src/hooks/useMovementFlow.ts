@@ -7,6 +7,7 @@ export type MovementState =
   | 'quantity_selected'
   | 'destination_selected'
   | 'confirming'
+  | 'attack_preview'
   | 'animating';
 
 export interface MovementFlow {
@@ -15,7 +16,7 @@ export interface MovementFlow {
   destinationId: string | null;
   quantity: number;
   maxQuantity: number;
-  actionType: 'mover' | null;
+  actionType: 'mover' | 'atacar' | null;
 }
 
 export function useMovementFlow() {
