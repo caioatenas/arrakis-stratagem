@@ -168,10 +168,10 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
               <SpiceParticles x={px} y={py} production={t.producao_spice} tipo={tipo} />
 
               <motion.path d={getTerritoryPath(px, py, outerR, seed)}
-                fill={color} fillOpacity={isSelected ? 0.35 : isMoveTarget && isHovered ? 0.3 : isHovered ? 0.25 : 0.12}
-                stroke={isSelected ? '#C4A35A' : isMoveTarget ? 'hsl(120, 40%, 50%)' : isNeighbor && effectiveSelected ? 'hsl(38, 50%, 50%)' : color}
-                strokeWidth={isSelected ? 3 : isMoveTarget ? 2 : isHovered ? 2 : 1}
-                filter={isSelected ? 'url(#glow-selected)' : isHovered ? 'url(#glow-hover)' : undefined}
+                fill={color} fillOpacity={isSelected ? 0.35 : isAttackTarget && isHovered ? 0.35 : isMoveOnly && isHovered ? 0.3 : isHovered ? 0.25 : 0.12}
+                stroke={isSelected ? '#C4A35A' : isAttackTarget ? 'hsl(0, 60%, 50%)' : isMoveOnly ? 'hsl(120, 40%, 50%)' : isNeighbor && effectiveSelected ? 'hsl(38, 50%, 50%)' : color}
+                strokeWidth={isSelected ? 3 : isAttackTarget ? 2.5 : isMoveOnly ? 2 : isHovered ? 2 : 1}
+                filter={isSelected ? 'url(#glow-selected)' : isAttackTarget && isHovered ? 'url(#glow-hover)' : isHovered ? 'url(#glow-hover)' : undefined}
                 animate={{ scale: isSelected ? 1.1 : isHovered ? 1.04 : 1 }}
                 style={{ transformOrigin: `${px}px ${py}px` }}
                 transition={{ type: 'spring', stiffness: 300, damping: 25 }} />
