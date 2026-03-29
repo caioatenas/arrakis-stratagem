@@ -41,8 +41,8 @@ export function useMovementFlow() {
     });
   }, []);
 
-  const selectAction = useCallback(() => {
-    setFlow(prev => ({ ...prev, state: 'action_selected', actionType: 'mover' }));
+  const selectAction = useCallback((type: 'mover' | 'atacar' = 'mover') => {
+    setFlow(prev => ({ ...prev, state: 'action_selected', actionType: type }));
   }, []);
 
   const setQuantity = useCallback((q: number) => {
