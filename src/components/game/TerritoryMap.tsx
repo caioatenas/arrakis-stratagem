@@ -96,6 +96,11 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
   const hoverPreviewLine = useMemo(() => {
     if (!isInMoveMode || !hoveredTerritory || !movementFlow.originId) return null;
     if (!moveOriginNeighbors.has(hoveredTerritory)) return null;
+    // For attack mode, only show preview to enemy territories
+    if (isAttackMode) {
+      const ht = territories.find(t => t.id === hoveredTerritory);
+      if (!ht || !ht.dono_id || ht.dono_id === currentPlayerId) return null;
+    }
     const origin = TERRITORIES.find(t => t.id === movementFlow.originId);
     const dest = TERRITORIES.find(t => t.id === hoveredTerritory);
     if (!origin || !dest) return null;
@@ -106,7 +111,7 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
     const cx = mx - dy * 0.15;
     const cy = my + dx * 0.15;
     return { path: `M ${origin.pos_x} ${origin.pos_y} Q ${cx} ${cy} ${dest.pos_x} ${dest.pos_y}`, dest };
-  }, [isInMoveMode, hoveredTerritory, movementFlow.originId, moveOriginNeighbors]);
+  }, [isInMoveMode, isAttackMode, hoveredTerritory, movementFlow.originId, moveOriginNeighbors, territories, currentPlayerId]);
 
   return (
     <div className="relative w-full h-full min-h-[600px] rounded-xl overflow-hidden">
