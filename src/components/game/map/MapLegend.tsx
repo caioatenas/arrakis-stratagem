@@ -7,7 +7,7 @@ interface MapLegendProps {
 
 export function MapLegend({ playerEstados }: MapLegendProps) {
   return (
-    <div className="absolute bottom-3 left-3 bg-card/90 backdrop-blur-sm border border-border rounded-lg p-3 z-20 text-xs space-y-2 min-w-[160px]">
+    <div className="bg-card/90 backdrop-blur-sm border border-border rounded-lg p-3 text-xs space-y-2">
       <h4 className="text-display text-primary text-[11px] tracking-wider uppercase">Legenda</h4>
 
       {/* Factions */}
