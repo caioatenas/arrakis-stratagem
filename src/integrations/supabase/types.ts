@@ -193,28 +193,40 @@ export type Database = {
       }
       partidas: {
         Row: {
+          code: string | null
           created_at: string
+          host_id: string | null
           id: string
+          map: string | null
           max_jogadores: number
           status: Database["public"]["Enums"]["game_status"]
+          turn_time: number | null
           turno_atual: number
           updated_at: string
           vencedor_id: string | null
         }
         Insert: {
+          code?: string | null
           created_at?: string
+          host_id?: string | null
           id?: string
+          map?: string | null
           max_jogadores?: number
           status?: Database["public"]["Enums"]["game_status"]
+          turn_time?: number | null
           turno_atual?: number
           updated_at?: string
           vencedor_id?: string | null
         }
         Update: {
+          code?: string | null
           created_at?: string
+          host_id?: string | null
           id?: string
+          map?: string | null
           max_jogadores?: number
           status?: Database["public"]["Enums"]["game_status"]
+          turn_time?: number | null
           turno_atual?: number
           updated_at?: string
           vencedor_id?: string | null
@@ -235,6 +247,7 @@ export type Database = {
           ativo: boolean
           cor: string
           created_at: string
+          house: string | null
           id: string
           partida_id: string
           player_id: string
@@ -245,6 +258,7 @@ export type Database = {
           ativo?: boolean
           cor?: string
           created_at?: string
+          house?: string | null
           id?: string
           partida_id: string
           player_id: string
@@ -255,6 +269,7 @@ export type Database = {
           ativo?: boolean
           cor?: string
           created_at?: string
+          house?: string | null
           id?: string
           partida_id?: string
           player_id?: string
