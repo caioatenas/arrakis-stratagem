@@ -9,7 +9,7 @@ import { ConnectionLines } from './map/ConnectionLines';
 import { TroopPin } from './map/TroopPin';
 import { FactionBanner } from './map/FactionBanner';
 import { SpiceParticles } from './map/SpiceParticles';
-import { MapLegend } from './map/MapLegend';
+import { WormExplosion } from './map/WormExplosion';
 import { MovementAnimation } from './map/MovementAnimation';
 import mapBg from '@/assets/map-background.jpg';
 
