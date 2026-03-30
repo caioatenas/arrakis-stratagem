@@ -234,6 +234,11 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
             onComplete={onAnimationComplete}
           />
         )}
+
+        {/* Worm explosion effect */}
+        {wormExplosionTarget && (
+          <WormExplosion targetId={wormExplosionTarget} onComplete={() => {}} />
+        )}
       </svg>
 
       {/* Tooltip */}
