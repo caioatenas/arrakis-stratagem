@@ -11,6 +11,7 @@ import { PlayerInfo } from '@/components/game/PlayerInfo';
 import { ResolveTurnButton } from '@/components/game/ResolveTurnButton';
 import { motion } from 'framer-motion';
 import { Tutorial } from '@/components/game/Tutorial';
+import { MapLegend } from '@/components/game/map/MapLegend';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function GamePage() {
@@ -156,6 +157,7 @@ export default function GamePage() {
             onCancelMove={handleCancelMove}
           />
           <GameLog logs={logs} />
+          <MapLegend playerEstados={playerEstados} />
         </div>
       </div>
 

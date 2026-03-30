@@ -281,7 +281,7 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
         </motion.div>
       )}
 
-      <MapLegend playerEstados={playerEstados} />
+      
     </div>
   );
 }
