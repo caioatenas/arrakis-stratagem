@@ -156,6 +156,7 @@ export default function GamePage() {
             onCancelMove={handleCancelMove}
           />
           <GameLog logs={logs} />
+          <MapLegend playerEstados={playerEstados} />
         </div>
       </div>
 
