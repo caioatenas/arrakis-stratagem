@@ -22,6 +22,7 @@ interface TerritoryMapProps {
   movementFlow: MovementFlow;
   playerColor: string;
   onAnimationComplete: () => void;
+  wormExplosionTarget?: string | null;
 }
 
 function getTerritoryPath(cx: number, cy: number, r: number, seed: number): string {
