@@ -28,92 +28,126 @@ export default function Matchmaking() {
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
-    if (!player) return;
-    setLoading(true);
-    const code = generateCode();
-    const { data, error } = await (supabase
-      .from('partidas') as any)
-      .insert({
-        status: 'waiting',
-        turno_atual: 0,
-        max_jogadores: maxPlayers,
-        code,
-        host_id: player.id,
-        turn_time: turnTime,
-        map: 'arrakis',
-      })
-      .select()
-      .single();
-
-    if (error || !data) {
-      toast.error('Erro ao criar partida');
-      setLoading(false);
+    if (!player?.id) {
+      toast.error('Usuário não autenticado');
       return;
     }
+    setLoading(true);
+    try {
+      const code = generateCode();
 
-    // Host joins as first player
-    await supabase.from('player_estado').insert({
-      partida_id: data.id,
-      player_id: player.id,
-      spice: 0,
-      acoes_restantes: 2,
-      cor: '#C4A35A',
-    });
+      // 1. Create match
+      const { data: partida, error: partidaErr } = await supabase
+        .from('partidas')
+        .insert({
+          status: 'waiting' as const,
+          turno_atual: 0,
+          max_jogadores: maxPlayers,
+          code,
+          host_id: player.id,
+          turn_time: turnTime,
+          map: 'arrakis',
+        })
+        .select()
+        .single();
 
-    setLoading(false);
-    navigate(`/lobby/${data.id}`);
+      if (partidaErr || !partida) {
+        console.error('CREATE_MATCH_ERROR:', partidaErr);
+        toast.error('Erro ao criar partida: ' + (partidaErr?.message || 'desconhecido'));
+        return;
+      }
+
+      // 2. Host joins as first player
+      const { error: estadoErr } = await supabase.from('player_estado').insert({
+        partida_id: partida.id,
+        player_id: player.id,
+        spice: 0,
+        acoes_restantes: 2,
+        cor: '#C4A35A',
+      });
+
+      if (estadoErr) {
+        console.error('CREATE_PLAYER_ESTADO_ERROR:', estadoErr);
+        toast.error('Erro ao entrar na partida: ' + estadoErr.message);
+        return;
+      }
+
+      navigate(`/lobby/${partida.id}`);
+    } catch (err: any) {
+      console.error('CREATE_MATCH_UNEXPECTED:', err);
+      toast.error('Erro inesperado ao criar partida');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleJoin = async () => {
-    if (!player || !joinCode.trim()) return;
+    if (!player?.id || !joinCode.trim()) {
+      toast.error('Usuário não autenticado ou código vazio');
+      return;
+    }
     setLoading(true);
-    const { data: partida } = await (supabase
-      .from('partidas') as any)
-      .select('*')
-      .eq('code', joinCode.trim().toUpperCase())
-      .single();
+    try {
+      const { data: partida, error: findErr } = await supabase
+        .from('partidas')
+        .select('*')
+        .eq('code', joinCode.trim().toUpperCase())
+        .single();
 
-    if (!partida || partida.status !== 'waiting') {
-      toast.error('Partida inválida ou já iniciada');
-      setLoading(false);
-      return;
-    }
+      if (findErr || !partida) {
+        toast.error('Partida não encontrada');
+        return;
+      }
 
-    // Check if already joined
-    const { data: existing } = await supabase
-      .from('player_estado')
-      .select('id')
-      .eq('partida_id', partida.id)
-      .eq('player_id', player.id);
+      if (partida.status !== 'waiting') {
+        toast.error('Partida já iniciada ou encerrada');
+        return;
+      }
 
-    if (existing && existing.length > 0) {
-      setLoading(false);
+      // Check if already joined
+      const { data: existing } = await supabase
+        .from('player_estado')
+        .select('id')
+        .eq('partida_id', partida.id)
+        .eq('player_id', player.id);
+
+      if (existing && existing.length > 0) {
+        navigate(`/lobby/${partida.id}`);
+        return;
+      }
+
+      // Check player count
+      const { count } = await supabase
+        .from('player_estado')
+        .select('*', { count: 'exact', head: true })
+        .eq('partida_id', partida.id);
+
+      if ((count || 0) >= partida.max_jogadores) {
+        toast.error('Partida lotada');
+        return;
+      }
+
+      const { error: joinErr } = await supabase.from('player_estado').insert({
+        partida_id: partida.id,
+        player_id: player.id,
+        spice: 0,
+        acoes_restantes: 2,
+        cor: '#C4A35A',
+      });
+
+      if (joinErr) {
+        console.error('JOIN_MATCH_ERROR:', joinErr);
+        toast.error('Erro ao entrar: ' + joinErr.message);
+        return;
+      }
+
       navigate(`/lobby/${partida.id}`);
-      return;
-    }
-
-    // Check player count
-    const { count } = await supabase
-      .from('player_estado')
-      .select('*', { count: 'exact', head: true })
-      .eq('partida_id', partida.id);
-
-    if ((count || 0) >= partida.max_jogadores) {
-      toast.error('Partida lotada');
+    } catch (err: any) {
+      console.error('JOIN_MATCH_UNEXPECTED:', err);
+      toast.error('Erro inesperado ao entrar');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    await supabase.from('player_estado').insert({
-      partida_id: partida.id,
-      player_id: player.id,
-      spice: 0,
-      acoes_restantes: 2,
-      cor: '#C4A35A',
-    });
-
-    setLoading(false);
-    navigate(`/lobby/${partida.id}`);
   };
 
   const turnOptions = [30, 60, 90, 120, 180];
