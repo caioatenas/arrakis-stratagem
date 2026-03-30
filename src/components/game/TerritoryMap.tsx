@@ -9,7 +9,7 @@ import { ConnectionLines } from './map/ConnectionLines';
 import { TroopPin } from './map/TroopPin';
 import { FactionBanner } from './map/FactionBanner';
 import { SpiceParticles } from './map/SpiceParticles';
-import { MapLegend } from './map/MapLegend';
+import { WormExplosion } from './map/WormExplosion';
 import { MovementAnimation } from './map/MovementAnimation';
 import mapBg from '@/assets/map-background.jpg';
 
@@ -22,6 +22,7 @@ interface TerritoryMapProps {
   movementFlow: MovementFlow;
   playerColor: string;
   onAnimationComplete: () => void;
+  wormExplosionTarget?: string | null;
 }
 
 function getTerritoryPath(cx: number, cy: number, r: number, seed: number): string {
@@ -40,7 +41,7 @@ function getTerritoryPath(cx: number, cy: number, r: number, seed: number): stri
   return d;
 }
 
-export function TerritoryMap({ territories, playerEstados, selectedTerritory, onSelectTerritory, currentPlayerId, movementFlow, playerColor, onAnimationComplete }: TerritoryMapProps) {
+export function TerritoryMap({ territories, playerEstados, selectedTerritory, onSelectTerritory, currentPlayerId, movementFlow, playerColor, onAnimationComplete, wormExplosionTarget }: TerritoryMapProps) {
   const [hoveredTerritory, setHoveredTerritory] = useState<string | null>(null);
 
   const getFaction = (donoId: string | null) => {
@@ -232,6 +233,11 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
             playerColor={playerColor}
             onComplete={onAnimationComplete}
           />
+        )}
+
+        {/* Worm explosion effect */}
+        {wormExplosionTarget && (
+          <WormExplosion targetId={wormExplosionTarget} onComplete={() => {}} />
         )}
       </svg>
 

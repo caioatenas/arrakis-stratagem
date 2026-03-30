@@ -39,14 +39,12 @@ export default function LobbyPage() {
 
   useEffect(() => { fetchLobby(); }, [fetchLobby]);
 
-  // Redirect to game if started
   useEffect(() => {
     if (partida?.status === 'in_progress') {
       navigate(`/game/${partidaId}`);
     }
   }, [partida?.status, partidaId, navigate]);
 
-  // Realtime
   useEffect(() => {
     if (!partidaId) return;
     const channel = supabase
@@ -68,9 +66,13 @@ export default function LobbyPage() {
       toast.error('Casa já escolhida por outro jogador');
       return;
     }
-    await (supabase.from('player_estado') as any)
+    const { error } = await (supabase.from('player_estado') as any)
       .update({ house: faction.id, cor: faction.color })
       .eq('id', myEstado.id);
+    if (error) {
+      console.error('SELECT_HOUSE_ERROR:', error);
+      toast.error('Erro ao selecionar casa');
+    }
   };
 
   const copyCode = () => {
@@ -82,49 +84,81 @@ export default function LobbyPage() {
   };
 
   const startMatch = async () => {
-    if (!partidaId || !isHost || !allReady) return;
+    if (!partidaId || !isHost || !allReady || !player?.id) {
+      toast.error('Condições não atendidas para iniciar');
+      return;
+    }
 
-    // Assign final colors from house selections
-    const updates = lobbyPlayers.map((lp, i) => {
-      const faction = FACTIONS.find(f => f.id === lp.house);
-      return (supabase.from('player_estado') as any)
-        .update({ cor: faction?.color || PLAYER_COLORS[i], ativo: true })
-        .eq('id', lp.id);
-    });
-    await Promise.all(updates);
+    try {
+      // 1. Assign final colors
+      for (let i = 0; i < lobbyPlayers.length; i++) {
+        const lp = lobbyPlayers[i];
+        const faction = FACTIONS.find(f => f.id === lp.house);
+        const { error } = await (supabase.from('player_estado') as any)
+          .update({ cor: faction?.color || PLAYER_COLORS[i], ativo: true })
+          .eq('id', lp.id);
+        if (error) {
+          console.error('UPDATE_PLAYER_COLOR_ERROR:', error);
+          toast.error('Erro ao configurar jogador');
+          return;
+        }
+      }
 
-    // Set status to in_progress
-    await supabase.from('partidas')
-      .update({ status: 'in_progress' as const, turno_atual: 1 })
-      .eq('id', partidaId);
+      // 2. Set status to in_progress
+      const { error: statusErr } = await supabase.from('partidas')
+        .update({ status: 'in_progress' as const, turno_atual: 1 })
+        .eq('id', partidaId);
+      if (statusErr) {
+        console.error('UPDATE_STATUS_ERROR:', statusErr);
+        toast.error('Erro ao iniciar partida');
+        return;
+      }
 
-    // Distribute territories
-    const playerIds = lobbyPlayers.map(lp => lp.player_id);
-    const shuffled = [...TERRITORIES].sort(() => Math.random() - 0.5);
-    const terrInserts = shuffled.map((t, i) => ({
-      id: t.id,
-      partida_id: partidaId,
-      nome: t.nome,
-      dono_id: playerIds[i % playerIds.length],
-      forca: 50,
-      producao_spice: t.producao_spice,
-      defesa_base: t.defesa_base,
-      vizinhos: t.vizinhos,
-      pos_x: t.pos_x,
-      pos_y: t.pos_y,
-      regiao: t.regiao,
-      tipo: t.tipo,
-    }));
-    await supabase.from('territorios').insert(terrInserts);
+      // 3. Distribute territories (don't send manual id - use auto-generated)
+      const playerIds = lobbyPlayers.map(lp => lp.player_id);
+      const shuffled = [...TERRITORIES].sort(() => Math.random() - 0.5);
+      const terrInserts = shuffled.map((t, i) => ({
+        id: t.id,
+        partida_id: partidaId,
+        nome: t.nome,
+        dono_id: playerIds[i % playerIds.length],
+        forca: 50,
+        producao_spice: t.producao_spice,
+        defesa_base: t.defesa_base,
+        vizinhos: t.vizinhos,
+        pos_x: t.pos_x,
+        pos_y: t.pos_y,
+        regiao: t.regiao,
+        tipo: t.tipo,
+      }));
+      const { error: terrErr } = await supabase.from('territorios').insert(terrInserts);
+      if (terrErr) {
+        console.error('INSERT_TERRITORIES_ERROR:', terrErr);
+        toast.error('Erro ao criar territórios: ' + terrErr.message);
+        return;
+      }
 
-    // Create first turn
-    await supabase.from('turnos').insert({ partida_id: partidaId, numero: 1 });
-    await supabase.from('game_logs').insert({
-      partida_id: partidaId,
-      turno_numero: 1,
-      nivel: 'publico' as const,
-      mensagem: `Partida iniciada com ${playerIds.length} jogadores! 20 territórios em disputa.`,
-    });
+      // 4. Create first turn
+      const { error: turnoErr } = await supabase.from('turnos').insert({ partida_id: partidaId, numero: 1 });
+      if (turnoErr) {
+        console.error('INSERT_TURNO_ERROR:', turnoErr);
+        toast.error('Erro ao criar turno');
+        return;
+      }
+
+      // 5. Game log
+      const { error: logErr } = await supabase.from('game_logs').insert({
+        partida_id: partidaId,
+        turno_numero: 1,
+        nivel: 'publico' as const,
+        mensagem: `Partida iniciada com ${playerIds.length} jogadores! 20 territórios em disputa.`,
+      });
+      if (logErr) console.error('INSERT_LOG_ERROR:', logErr);
+
+    } catch (err: any) {
+      console.error('START_MATCH_UNEXPECTED:', err);
+      toast.error('Erro inesperado ao iniciar partida');
+    }
   };
 
   if (!partida || !player) {
@@ -138,7 +172,6 @@ export default function LobbyPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-2xl space-y-6">
-        {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-display text-4xl text-primary tracking-[0.2em]">LOBBY</h1>
           <div className="flex items-center justify-center gap-3">
@@ -152,7 +185,6 @@ export default function LobbyPage() {
           </div>
         </div>
 
-        {/* Match Code */}
         <div className="border-glow rounded-lg p-6 text-center space-y-3">
           <p className="text-sm text-muted-foreground font-body">Código da Partida</p>
           <div className="flex items-center justify-center gap-3">
@@ -164,7 +196,6 @@ export default function LobbyPage() {
           <p className="text-xs text-muted-foreground font-body">Compartilhe este código com seus amigos</p>
         </div>
 
-        {/* Players */}
         <div className="border-glow rounded-lg p-6 space-y-4">
           <h2 className="text-display text-lg text-foreground tracking-[0.1em]">Jogadores</h2>
           <div className="space-y-2">
@@ -203,7 +234,6 @@ export default function LobbyPage() {
           </div>
         </div>
 
-        {/* House Selection */}
         <div className="border-glow rounded-lg p-6 space-y-4">
           <h2 className="text-display text-lg text-foreground tracking-[0.1em]">Escolha sua Casa</h2>
           <div className="grid grid-cols-3 gap-3">
@@ -247,7 +277,6 @@ export default function LobbyPage() {
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => navigate('/')} className="font-body">
             <ArrowLeft className="w-4 h-4 mr-2" /> Voltar

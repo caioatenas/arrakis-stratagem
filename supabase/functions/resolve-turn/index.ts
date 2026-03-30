@@ -9,7 +9,10 @@ function d10(): number {
   return Math.floor(Math.random() * 10) + 1;
 }
 
-// Region definitions for bonus calculation
+function d6(): number {
+  return Math.floor(Math.random() * 6) + 1;
+}
+
 const REGIONS = ["norte", "centro", "sul", "leste"];
 const REGION_BONUS_SPICE = 15;
 
@@ -48,9 +51,6 @@ Deno.serve(async (req) => {
     const logs: Array<{ partida_id: string; turno_numero: number; nivel: string; mensagem: string; dados: Record<string, unknown>; player_id?: string }> = [];
     const terrMap = new Map(territorios.map((t: any) => [t.id, { ...t }]));
 
-    // Track which players attacked this turn (for movement restriction)
-    const playersWhoAttacked = new Set<string>();
-
     // 1. RESOLVE MOVEMENTS
     const moveActions = (acoes || []).filter((a: any) => a.tipo === "mover");
     for (const action of moveActions) {
@@ -59,16 +59,11 @@ Deno.serve(async (req) => {
       if (!origem || !destino) continue;
       if (origem.dono_id !== action.player_id) continue;
       if (!origem.vizinhos.includes(action.destino_id)) continue;
-
-      // Can't move to enemy territory (that's an attack)
       if (destino.dono_id && destino.dono_id !== action.player_id) continue;
 
-      // Max 50% of origin force
       const maxMove = Math.floor(origem.forca / 2);
       const qty = Math.min(action.quantidade || 0, maxMove);
       if (qty <= 0) continue;
-
-      // Must leave at least 1 unit
       if (origem.forca - qty < 1) continue;
 
       origem.forca -= qty;
@@ -132,9 +127,6 @@ Deno.serve(async (req) => {
       if (origem.dono_id !== action.player_id) continue;
       if (!origem.vizinhos.includes(action.destino_id)) continue;
 
-      playersWhoAttacked.add(action.player_id);
-
-      // Empty territory = auto-conquest
       if (!destino.dono_id || destino.forca <= 0) {
         const sent = Math.floor(origem.forca / 2);
         destino.dono_id = action.player_id;
@@ -172,8 +164,106 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 6. REGION BONUS — +15 spice if player controls all territories in a region
+    // 6. SANDWORM EVENT — Dice-based deterministic system
+    const wormDie1 = d6();
+    const wormDie2 = d6();
+    const wormActivated = wormDie1 === wormDie2;
+    const wormEventData: Record<string, unknown> = {
+      dice: [wormDie1, wormDie2],
+      activated: wormActivated,
+    };
+
+    const eventos: Array<{ turno_id: string; partida_id: string; tipo: string; descricao: string; territorios_afetados: string[] }> = [];
     const terrArray = Array.from(terrMap.values());
+
+    if (wormActivated) {
+      const wormStrength = (wormDie1 + wormDie2) * 10;
+      
+      // Target selection: weighted by spice production
+      const totalWeight = terrArray.reduce((sum: number, t: any) => sum + t.producao_spice, 0);
+      let roll = Math.random() * totalWeight;
+      let target = terrArray[0];
+      for (const t of terrArray) {
+        roll -= t.producao_spice;
+        if (roll <= 0) { target = t; break; }
+      }
+
+      // Worm combat resolution
+      const wormAttack = wormStrength + d10();
+      const terrDefense = target.forca + target.defesa_base + d10();
+      const wormResult = wormAttack - terrDefense;
+
+      let resultType: string;
+      if (wormResult > 0) {
+        // Worm wins: territory loses 50% force, 20% defense
+        target.forca = Math.max(0, Math.floor(target.forca * 0.5));
+        target.defesa_base = Math.max(0, Math.floor(target.defesa_base * 0.8));
+        resultType = "attack_wins";
+      } else if (wormResult < 0) {
+        // Territory defends: loses 20% force
+        target.forca = Math.max(0, Math.floor(target.forca * 0.8));
+        resultType = "defense_wins";
+      } else {
+        // Draw: both lose 30%
+        target.forca = Math.max(0, Math.floor(target.forca * 0.7));
+        target.defesa_base = Math.max(0, Math.floor(target.defesa_base * 0.7));
+        resultType = "draw";
+      }
+
+      wormEventData.wormStrength = wormStrength;
+      wormEventData.targetId = target.id;
+      wormEventData.targetName = target.nome;
+      wormEventData.result = resultType;
+      wormEventData.wormAttack = wormAttack;
+      wormEventData.terrDefense = terrDefense;
+
+      eventos.push({
+        turno_id, partida_id, tipo: "vermes",
+        descricao: `Verme da areia emergiu em ${target.nome} com força ${wormStrength}! Resultado: ${resultType}`,
+        territorios_afetados: [target.id],
+      });
+
+      logs.push({
+        partida_id, turno_numero: turnoNum, nivel: "publico",
+        mensagem: `🪱 Verme da areia emergiu em ${target.nome} com força ${wormStrength}! (${wormDie1},${wormDie2}) → ${resultType === "attack_wins" ? "DEVASTAÇÃO" : resultType === "defense_wins" ? "REPELIDO" : "EMPATE"}`,
+        dados: wormEventData,
+      });
+    } else {
+      logs.push({
+        partida_id, turno_numero: turnoNum, nivel: "publico",
+        mensagem: `🪱 Dados do verme: (${wormDie1},${wormDie2}) — Nenhum verme emergiu.`,
+        dados: wormEventData,
+      });
+    }
+
+    // 7. OTHER RANDOM EVENTS (excluding worm which is now deterministic)
+    const otherEvents = ["tempestade", "superproducao", "instabilidade"];
+    if (Math.random() < 0.35) {
+      const eventType = otherEvents[Math.floor(Math.random() * otherEvents.length)];
+      switch (eventType) {
+        case "tempestade": {
+          const affected = terrArray.filter(() => Math.random() < 0.3);
+          for (const t of affected) t.forca = Math.max(0, t.forca - 15);
+          eventos.push({ turno_id, partida_id, tipo: "tempestade", descricao: `Tempestade de areia! ${affected.length} territórios (-15 força)`, territorios_afetados: affected.map((t: any) => t.id) });
+          logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `🌪️ Tempestade de areia afetou ${affected.length} territórios!`, dados: {} });
+          break;
+        }
+        case "superproducao": {
+          for (const pe of playerEstados) pe.spice = (pe.spice || 0) + 20;
+          eventos.push({ turno_id, partida_id, tipo: "superproducao", descricao: "Superprodução de Spice! +20 para todos", territorios_afetados: [] });
+          logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `✨ Superprodução de Spice! +20 para todos!`, dados: {} });
+          break;
+        }
+        case "instabilidade": {
+          for (const t of terrArray) t.defesa_base = Math.max(0, t.defesa_base - 5);
+          eventos.push({ turno_id, partida_id, tipo: "instabilidade", descricao: "Instabilidade política! -5 defesa global", territorios_afetados: terrArray.map((t: any) => t.id) });
+          logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `⚡ Instabilidade política! -5 defesa global`, dados: {} });
+          break;
+        }
+      }
+    }
+
+    // 8. REGION BONUS
     for (const region of REGIONS) {
       const regionTerrs = terrArray.filter((t: any) => t.regiao === region);
       if (regionTerrs.length === 0) continue;
@@ -192,47 +282,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 7. GENERATE EVENT
-    const eventTypes = ["tempestade", "vermes", "superproducao", "instabilidade"];
-    const eventIdx = Math.floor(Math.random() * eventTypes.length);
-    const eventType = eventTypes[eventIdx];
-    const eventos: Array<{ turno_id: string; partida_id: string; tipo: string; descricao: string; territorios_afetados: string[] }> = [];
-
-    switch (eventType) {
-      case "tempestade": {
-        const affected = terrArray.filter(() => Math.random() < 0.3);
-        for (const t of affected) t.forca = Math.max(0, t.forca - 15);
-        eventos.push({ turno_id, partida_id, tipo: "tempestade", descricao: `Tempestade de areia! ${affected.length} territórios (-15 força)`, territorios_afetados: affected.map((t: any) => t.id) });
-        logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `🌪️ Tempestade de areia afetou ${affected.length} territórios!`, dados: {} });
-        break;
-      }
-      case "vermes": {
-        const target = terrArray[Math.floor(Math.random() * terrArray.length)];
-        target.forca = Math.max(0, target.forca - 20);
-        eventos.push({ turno_id, partida_id, tipo: "vermes", descricao: `Verme da areia em ${target.nome}! (-20 força)`, territorios_afetados: [target.id] });
-        logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `🪱 Verme da areia atacou ${target.nome}!`, dados: {} });
-        break;
-      }
-      case "superproducao": {
-        for (const pe of playerEstados) pe.spice = (pe.spice || 0) + 20;
-        eventos.push({ turno_id, partida_id, tipo: "superproducao", descricao: "Superprodução de Spice! +20 para todos", territorios_afetados: [] });
-        logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `✨ Superprodução de Spice! +20 para todos!`, dados: {} });
-        break;
-      }
-      case "instabilidade": {
-        for (const t of terrArray) t.defesa_base = Math.max(0, t.defesa_base - 5);
-        eventos.push({ turno_id, partida_id, tipo: "instabilidade", descricao: "Instabilidade política! -5 defesa global", territorios_afetados: terrArray.map((t: any) => t.id) });
-        logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `⚡ Instabilidade política! -5 defesa global`, dados: {} });
-        break;
-      }
-    }
-
-    if (Math.random() < 0.3) {
-      const extraIdx = (eventIdx + 1 + Math.floor(Math.random() * 3)) % eventTypes.length;
-      logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `⚠️ Evento adicional: ${eventTypes[extraIdx]}!`, dados: {} });
-    }
-
-    // Apply +5 force per turn per owned territory
+    // 9. Troop regeneration (+5 per owned territory)
     for (const t of terrArray) {
       if (t.dono_id) t.forca = Math.min(100, t.forca + 5);
     }
@@ -284,7 +334,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, turno: turnoNum, vencedor: vencedorId }),
+      JSON.stringify({ success: true, turno: turnoNum, vencedor: vencedorId, wormEvent: wormEventData }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

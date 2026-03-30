@@ -12,6 +12,7 @@ import { ResolveTurnButton } from '@/components/game/ResolveTurnButton';
 import { motion } from 'framer-motion';
 import { Tutorial } from '@/components/game/Tutorial';
 import { MapLegend } from '@/components/game/map/MapLegend';
+import { WormEventOverlay, type WormEventData } from '@/components/game/WormEventOverlay';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function GamePage() {
@@ -21,23 +22,22 @@ export default function GamePage() {
   const { territories, playerEstados, logs, turnoAtual, turnoId, gameStatus, refetch } = useGameState(partidaId || null);
   const [selectedTerritory, setSelectedTerritory] = useState<string | null>(null);
   const { flow, selectOrigin, selectAction, setQuantity, confirmQuantity, selectDestination, startAnimation, reset } = useMovementFlow();
+  const [wormEvent, setWormEvent] = useState<WormEventData | null>(null);
+  const [wormExplosionTarget, setWormExplosionTarget] = useState<string | null>(null);
 
   const myEstado = playerEstados.find(pe => pe.player_id === player?.id) || null;
 
   const handleSelectTerritory = useCallback((id: string) => {
-    // If in movement/attack flow waiting for destination
     if (flow.state === 'quantity_selected') {
       const originTerr = territories.find(t => t.id === flow.originId);
       const destTerr = territories.find(t => t.id === id);
       if (!originTerr || !destTerr || !originTerr.vizinhos.includes(id)) return;
 
       if (flow.actionType === 'atacar') {
-        // Attack: destination must be enemy
         if (destTerr.dono_id && destTerr.dono_id !== player?.id) {
           selectDestination(id);
         }
       } else {
-        // Move: destination must be own or neutral
         if (!destTerr.dono_id || destTerr.dono_id === player?.id) {
           selectDestination(id);
         }
@@ -67,7 +67,6 @@ export default function GamePage() {
     if (!flow.originId || !flow.destinationId || !turnoId || !player?.id || !partidaId) return;
     startAnimation();
 
-    // Submit the action
     await supabase.from('acoes').insert({
       turno_id: turnoId,
       player_id: player.id,
@@ -84,7 +83,6 @@ export default function GamePage() {
         .eq('id', myEstado.id);
     }
 
-    // Animation runs for ~900ms then cleanup
     setTimeout(() => {
       reset();
       setSelectedTerritory(null);
@@ -101,6 +99,24 @@ export default function GamePage() {
     const pe = playerEstados.find(p => p.player_id === playerId);
     return pe?.cor || '#555';
   }, [playerEstados]);
+
+  const handleTurnResolved = useCallback((wormData?: WormEventData) => {
+    if (wormData) {
+      setWormEvent(wormData);
+      if (wormData.activated && wormData.targetId) {
+        // Show explosion on map after overlay dismisses
+        setTimeout(() => {
+          setWormExplosionTarget(wormData.targetId || null);
+          setTimeout(() => setWormExplosionTarget(null), 1200);
+        }, 4500);
+      }
+    }
+    refetch();
+  }, [refetch]);
+
+  const handleWormOverlayComplete = useCallback(() => {
+    setWormEvent(null);
+  }, []);
 
   if (gameStatus === 'finished') {
     return (
@@ -119,7 +135,7 @@ export default function GamePage() {
         <h1 className="text-display text-xl text-primary tracking-[0.15em]">ARRAKIS</h1>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground font-body">Turno {turnoAtual}</span>
-          <ResolveTurnButton partidaId={partidaId || null} turnoId={turnoId} turnoAtual={turnoAtual} onResolved={refetch} />
+          <ResolveTurnButton partidaId={partidaId || null} turnoId={turnoId} turnoAtual={turnoAtual} onResolved={handleTurnResolved} />
         </div>
       </header>
 
@@ -134,6 +150,7 @@ export default function GamePage() {
             movementFlow={flow}
             playerColor={getPlayerColor(player?.id || null)}
             onAnimationComplete={() => {}}
+            wormExplosionTarget={wormExplosionTarget}
           />
         </div>
 
@@ -162,6 +179,7 @@ export default function GamePage() {
       </div>
 
       <Tutorial />
+      <WormEventOverlay event={wormEvent} onComplete={handleWormOverlayComplete} />
     </div>
   );
 }
