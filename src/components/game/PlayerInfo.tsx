@@ -1,16 +1,24 @@
 import type { PlayerEstado } from '@/hooks/useGameState';
 import type { Player } from '@/hooks/usePlayer';
 import { FACTIONS } from '@/lib/factions';
+import { SALARY_CYCLE_TURNS } from '@/lib/gameConstants';
+import { Coins } from 'lucide-react';
 
 interface PlayerInfoProps {
   player: Player | null;
   estado: PlayerEstado | null;
   turnoAtual: number;
   allEstados: PlayerEstado[];
-  allPlayers?: Player[];
+  territories?: { dono_id: string | null; forca: number }[];
 }
 
-export function PlayerInfo({ player, estado, turnoAtual, allEstados }: PlayerInfoProps) {
+export function PlayerInfo({ player, estado, turnoAtual, allEstados, territories = [] }: PlayerInfoProps) {
+  const turnsUntilSalary = SALARY_CYCLE_TURNS - (turnoAtual % SALARY_CYCLE_TURNS);
+  const myTroops = territories
+    .filter(t => t.dono_id === player?.id)
+    .reduce((sum, t) => sum + t.forca, 0);
+  const salaryCost = Math.floor(myTroops * 0.3);
+
   return (
     <div className="border-glow rounded-lg p-4 space-y-3">
       <div className="flex items-center gap-3">
@@ -34,6 +42,18 @@ export function PlayerInfo({ player, estado, turnoAtual, allEstados }: PlayerInf
           <div className="text-xs text-muted-foreground font-body">Ações</div>
           <div className="text-lg text-primary font-bold font-body">{estado?.acoes_restantes ?? 0}</div>
         </div>
+      </div>
+
+      {/* Salary preview */}
+      <div className="bg-secondary/30 rounded px-3 py-2 flex items-center gap-2 text-xs font-body">
+        <Coins className="w-3.5 h-3.5 text-muted-foreground" />
+        <div className="flex-1">
+          <span className="text-muted-foreground">Salário em {turnsUntilSalary}t: </span>
+          <span className={`font-semibold ${(estado?.spice ?? 0) < salaryCost ? 'text-destructive' : 'text-spice'}`}>
+            {salaryCost} ⟡
+          </span>
+        </div>
+        <span className="text-muted-foreground">{myTroops} tropas</span>
       </div>
 
       {/* Other players */}

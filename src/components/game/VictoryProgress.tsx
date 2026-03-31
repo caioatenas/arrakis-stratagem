@@ -2,18 +2,17 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { Territory, PlayerEstado } from '@/hooks/useGameState';
 import { FACTIONS } from '@/lib/factions';
-import { Trophy, Target, Gem } from 'lucide-react';
+import { VICTORY_TERRITORY_PCT, VICTORY_SPICE, SALARY_CYCLE_TURNS } from '@/lib/gameConstants';
+import { Trophy, Target, Gem, Coins } from 'lucide-react';
 
 interface VictoryProgressProps {
   territories: Territory[];
   playerEstados: PlayerEstado[];
   currentPlayerId: string | null;
+  turnoAtual?: number;
 }
 
-const VICTORY_TERRITORY_PCT = 60;
-const VICTORY_SPICE = 500;
-
-export function VictoryProgress({ territories, playerEstados, currentPlayerId }: VictoryProgressProps) {
+export function VictoryProgress({ territories, playerEstados, currentPlayerId, turnoAtual = 0 }: VictoryProgressProps) {
   const progress = useMemo(() => {
     const total = territories.length;
     if (total === 0) return [];
@@ -24,6 +23,10 @@ export function VictoryProgress({ territories, playerEstados, currentPlayerId }:
         const owned = territories.filter(t => t.dono_id === pe.player_id).length;
         const percent = Math.round((owned / total) * 100);
         const faction = pe.house ? FACTIONS.find(f => f.id === pe.house) : null;
+        const totalTroops = territories
+          .filter(t => t.dono_id === pe.player_id)
+          .reduce((sum, t) => sum + t.forca, 0);
+        const salaryCost = Math.floor(totalTroops * 0.3);
         return {
           playerId: pe.player_id,
           cor: pe.cor,
@@ -32,10 +35,16 @@ export function VictoryProgress({ territories, playerEstados, currentPlayerId }:
           spice: pe.spice,
           faction,
           isMe: pe.player_id === currentPlayerId,
+          salaryCost,
+          totalTroops,
+          canPay: pe.spice >= salaryCost,
         };
       })
       .sort((a, b) => b.percent - a.percent);
   }, [territories, playerEstados, currentPlayerId]);
+
+  const turnsUntilSalary = SALARY_CYCLE_TURNS - (turnoAtual % SALARY_CYCLE_TURNS);
+  const isSalaryNext = turnsUntilSalary === 1;
 
   if (progress.length === 0) return null;
 
@@ -72,7 +81,6 @@ export function VictoryProgress({ territories, playerEstados, currentPlayerId }:
             </motion.div>
           ))}
         </div>
-        {/* Victory threshold marker */}
         <div className="relative h-1">
           <div
             className="absolute top-0 w-px h-3 bg-primary -translate-y-1"
@@ -85,6 +93,19 @@ export function VictoryProgress({ territories, playerEstados, currentPlayerId }:
             {VICTORY_TERRITORY_PCT}%
           </span>
         </div>
+      </div>
+
+      {/* Salary indicator */}
+      <div className={`flex items-center gap-2 text-xs font-body rounded px-2 py-1.5 ${isSalaryNext ? 'bg-destructive/15 border border-destructive/30' : 'bg-secondary/30'}`}>
+        <Coins className={`w-3.5 h-3.5 ${isSalaryNext ? 'text-destructive' : 'text-muted-foreground'}`} />
+        <span className={isSalaryNext ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
+          Pagamento em {turnsUntilSalary} turno{turnsUntilSalary > 1 ? 's' : ''}
+        </span>
+        {progress.find(p => p.isMe) && (
+          <span className="ml-auto text-spice font-semibold">
+            ~{progress.find(p => p.isMe)?.salaryCost} ⟡
+          </span>
+        )}
       </div>
 
       {/* Player details */}
@@ -102,6 +123,13 @@ export function VictoryProgress({ territories, playerEstados, currentPlayerId }:
           </div>
         ))}
       </div>
+
+      {/* Salary warning for current player */}
+      {isSalaryNext && progress.find(p => p.isMe && !p.canPay) && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded px-2 py-1.5 text-[10px] text-destructive font-body">
+          ⚠️ Spice insuficiente! Tropas desertarão no próximo pagamento.
+        </div>
+      )}
 
       {/* Victory conditions */}
       <div className="border-t border-border pt-2 text-[10px] text-muted-foreground font-body space-y-0.5">
