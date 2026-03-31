@@ -13,13 +13,13 @@ export function MapLegend({ playerEstados }: MapLegendProps) {
       {/* Factions */}
       <div className="space-y-1">
         <p className="text-muted-foreground font-semibold">Casas</p>
-        {playerEstados.map((pe, i) => {
-          const faction = FACTIONS[i % FACTIONS.length];
+      {playerEstados.map((pe) => {
+          const faction = pe.house ? FACTIONS.find(f => f.id === pe.house) : null;
           return (
             <div key={pe.id} className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: pe.cor }} />
-              <span className="text-foreground">{faction.name}</span>
-              <span className="text-muted-foreground ml-auto">{faction.symbol}</span>
+              <span className="text-foreground">{faction?.name || 'Sem Casa'}</span>
+              <span className="text-muted-foreground ml-auto">{faction?.symbol || '?'}</span>
             </div>
           );
         })}

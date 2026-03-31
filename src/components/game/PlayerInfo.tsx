@@ -39,15 +39,18 @@ export function PlayerInfo({ player, estado, turnoAtual, allEstados }: PlayerInf
       {/* Other players */}
       <div className="space-y-1">
         <p className="text-xs text-muted-foreground font-body">Jogadores:</p>
-        {allEstados.map(pe => (
-          <div key={pe.id} className="flex items-center gap-2 text-xs font-body">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: pe.cor }} />
-            <span className={pe.ativo ? 'text-foreground' : 'text-muted-foreground line-through'}>
-              {pe.player_id === player?.id ? 'Você' : pe.player_id.slice(0, 8)}
-            </span>
-            <span className="text-spice ml-auto">⟡ {pe.spice}</span>
-          </div>
-        ))}
+      {allEstados.map(pe => {
+          const faction = pe.house ? FACTIONS.find(f => f.id === pe.house) : null;
+          return (
+            <div key={pe.id} className="flex items-center gap-2 text-xs font-body">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: pe.cor }} />
+              <span className={pe.ativo ? 'text-foreground' : 'text-muted-foreground line-through'}>
+                {faction?.symbol} {pe.player_id === player?.id ? 'Você' : (faction?.name || pe.player_id.slice(0, 8))}
+              </span>
+              <span className="text-spice ml-auto">⟡ {pe.spice}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
