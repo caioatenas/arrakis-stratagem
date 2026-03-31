@@ -156,7 +156,8 @@ export default function GamePage() {
           />
         </div>
 
-        <div className="w-full lg:w-80 space-y-4">
+        <div className="w-full lg:w-80 space-y-4 overflow-y-auto max-h-[calc(100vh-80px)]">
+          <VictoryProgress territories={territories} playerEstados={playerEstados} currentPlayerId={player?.id || null} />
           <PlayerInfo player={player || null} estado={myEstado} turnoAtual={turnoAtual} allEstados={playerEstados} />
           <ActionPanel
             selectedTerritory={selectedTerritory}
