@@ -346,8 +346,10 @@ Deno.serve(async (req) => {
         .eq("id", t.id).eq("partida_id", partida_id);
     }
     for (const pe of playerEstados) {
+      const houseBonus = getHouseBonus(playerEstados, pe.player_id);
+      const baseActions = 2 + (houseBonus.acoes || 0);
       await supabase.from("player_estado")
-        .update({ spice: pe.spice, acoes_restantes: 2 })
+        .update({ spice: pe.spice, acoes_restantes: baseActions })
         .eq("id", pe.id);
     }
     await supabase.from("turnos").update({ resolvido: true, resolved_at: new Date().toISOString() }).eq("id", turno_id);
