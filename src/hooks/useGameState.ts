@@ -24,6 +24,7 @@ export interface PlayerEstado {
   acoes_restantes: number;
   ativo: boolean;
   cor: string;
+  house: string | null;
 }
 
 export interface GameLog {

@@ -48,8 +48,10 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
     if (!donoId) return null;
     const pe = playerEstados.find(p => p.player_id === donoId);
     if (!pe) return null;
-    const idx = playerEstados.indexOf(pe);
-    return FACTIONS[idx % FACTIONS.length];
+    if (pe.house) {
+      return FACTIONS.find(f => f.id === pe.house) || null;
+    }
+    return getFactionByColor(pe.cor);
   };
 
   const getPlayerColor = (donoId: string | null) => {

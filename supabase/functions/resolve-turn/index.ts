@@ -16,6 +16,25 @@ function d6(): number {
 const REGIONS = ["norte", "centro", "sul", "leste"];
 const REGION_BONUS_SPICE = 15;
 
+// House bonus system
+const HOUSE_BONUSES: Record<string, { ataque?: number; defesa?: number; acoes?: number; spice_mult?: number; regen?: number }> = {
+  atreides:      { defesa: 10 },
+  harkonnen:     { ataque: 10 },
+  corrino:       { acoes: 1 },
+  fremen:        {},           // Handled separately (worm immunity)
+  fenring:       {},           // Spy bonus handled in espionage
+  ix:            { spice_mult: 15 },
+  bene_gesserit: {},
+  guilda:        {},           // Movement bonus handled in move
+  tleilaxu:      { regen: 3 },
+};
+
+function getHouseBonus(playerEstados: any[], playerId: string): typeof HOUSE_BONUSES[string] {
+  const pe = playerEstados.find((p: any) => p.player_id === playerId);
+  if (!pe?.house) return {};
+  return HOUSE_BONUSES[pe.house] || {};
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -142,8 +161,10 @@ Deno.serve(async (req) => {
 
       const atkRoll = d10();
       const defRoll = d10();
-      const ataque = origem.forca + atkRoll;
-      const defesa = destino.forca + defRoll + destino.defesa_base;
+      const atkBonus = getHouseBonus(playerEstados, action.player_id);
+      const defBonus = destino.dono_id ? getHouseBonus(playerEstados, destino.dono_id) : {};
+      const ataque = origem.forca + atkRoll + (atkBonus.ataque || 0);
+      const defesa = destino.forca + defRoll + destino.defesa_base + (defBonus.defesa || 0);
       const resultado = ataque - defesa;
 
       logs.push({
@@ -188,16 +209,22 @@ Deno.serve(async (req) => {
         if (roll <= 0) { target = t; break; }
       }
 
+      // Fremen immunity: reduce worm damage by 50%
+      const ownerBonus = target.dono_id ? getHouseBonus(playerEstados, target.dono_id) : {};
+      const isFremen = playerEstados.find((p: any) => p.player_id === target.dono_id)?.house === 'fremen';
+
       // Worm combat resolution
       const wormAttack = wormStrength + d10();
-      const terrDefense = target.forca + target.defesa_base + d10();
+      const terrDefense = target.forca + target.defesa_base + d10() + (ownerBonus.defesa || 0);
       const wormResult = wormAttack - terrDefense;
 
       let resultType: string;
       if (wormResult > 0) {
-        // Worm wins: territory loses 50% force, 20% defense
-        target.forca = Math.max(0, Math.floor(target.forca * 0.5));
-        target.defesa_base = Math.max(0, Math.floor(target.defesa_base * 0.8));
+        // Worm wins: territory loses 50% force (25% for Fremen), 20% defense
+        const forceLoss = isFremen ? 0.75 : 0.5;
+        const defLoss = isFremen ? 0.9 : 0.8;
+        target.forca = Math.max(0, Math.floor(target.forca * forceLoss));
+        target.defesa_base = Math.max(0, Math.floor(target.defesa_base * defLoss));
         resultType = "attack_wins";
       } else if (wormResult < 0) {
         // Territory defends: loses 20% force
@@ -282,9 +309,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 9. Troop regeneration (+5 per owned territory)
+    // 9. Troop regeneration (+5 per owned territory, +8 for Tleilaxu)
     for (const t of terrArray) {
-      if (t.dono_id) t.forca = Math.min(100, t.forca + 5);
+      if (t.dono_id) {
+        const bonus = getHouseBonus(playerEstados, t.dono_id);
+        t.forca = Math.min(100, t.forca + 5 + (bonus.regen || 0));
+      }
     }
 
     // Reset fortification (lasts 1 turn)
@@ -316,8 +346,10 @@ Deno.serve(async (req) => {
         .eq("id", t.id).eq("partida_id", partida_id);
     }
     for (const pe of playerEstados) {
+      const houseBonus = getHouseBonus(playerEstados, pe.player_id);
+      const baseActions = 2 + (houseBonus.acoes || 0);
       await supabase.from("player_estado")
-        .update({ spice: pe.spice, acoes_restantes: 2 })
+        .update({ spice: pe.spice, acoes_restantes: baseActions })
         .eq("id", pe.id);
     }
     await supabase.from("turnos").update({ resolvido: true, resolved_at: new Date().toISOString() }).eq("id", turno_id);
