@@ -183,6 +183,7 @@ export default function GamePage() {
 
       <Tutorial />
       <WormEventOverlay event={wormEvent} onComplete={handleWormOverlayComplete} />
+      <TurnAnimationQueue logs={logs} turnoAtual={turnoAtual} />
     </div>
   );
 }
