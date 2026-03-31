@@ -14,18 +14,32 @@ function d6(): number {
 }
 
 const REGIONS = ["norte", "centro", "sul", "leste"];
-const REGION_BONUS_SPICE = 15;
+
+// ── BALANCE CONSTANTS ──
+const REGION_BONUS_SPICE = 10;
+const TROOP_REGEN = 3;
+const COMBAT_DAMAGE_MULT = 0.6;
+const VICTORY_TERRITORY_PCT = 0.7;
+const VICTORY_SPICE = 800;
+const SALARY_CYCLE = 3;
+const SALARY_TROOP_PCT = 0.3;
+const SALARY_COST = 1;
+const MAX_SALARY_LOSS = 0.5;
+const MIN_FORCE = 1;
+const SUPERPRODUCTION_BONUS = 10;
+const PRESSURE_START = 10;
+const PRESSURE_ESCALATE = 15;
 
 // House bonus system
 const HOUSE_BONUSES: Record<string, { ataque?: number; defesa?: number; acoes?: number; spice_mult?: number; regen?: number }> = {
   atreides:      { defesa: 10 },
   harkonnen:     { ataque: 10 },
   corrino:       { acoes: 1 },
-  fremen:        {},           // Handled separately (worm immunity)
-  fenring:       {},           // Spy bonus handled in espionage
+  fremen:        {},
+  fenring:       {},
   ix:            { spice_mult: 15 },
   bene_gesserit: {},
-  guilda:        {},           // Movement bonus handled in move
+  guilda:        {},
   tleilaxu:      { regen: 3 },
 };
 
@@ -70,7 +84,9 @@ Deno.serve(async (req) => {
     const logs: Array<{ partida_id: string; turno_numero: number; nivel: string; mensagem: string; dados: Record<string, unknown>; player_id?: string }> = [];
     const terrMap = new Map(territorios.map((t: any) => [t.id, { ...t }]));
 
+    // ═══════════════════════════════════════
     // 1. RESOLVE MOVEMENTS
+    // ═══════════════════════════════════════
     const moveActions = (acoes || []).filter((a: any) => a.tipo === "mover");
     for (const action of moveActions) {
       const origem = terrMap.get(action.origem_id);
@@ -95,7 +111,9 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ═══════════════════════════════════════
     // 2. RESOLVE ESPIONAGE
+    // ═══════════════════════════════════════
     const spyActions = (acoes || []).filter((a: any) => a.tipo === "espionar");
     for (const action of spyActions) {
       const target = terrMap.get(action.destino_id || action.origem_id);
@@ -108,7 +126,9 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ═══════════════════════════════════════
     // 3. RESOLVE FORTIFY
+    // ═══════════════════════════════════════
     const fortifyActions = (acoes || []).filter((a: any) => a.tipo === "fortificar");
     for (const action of fortifyActions) {
       const terr = terrMap.get(action.origem_id || action.destino_id);
@@ -121,7 +141,9 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ═══════════════════════════════════════
     // 4. RESOLVE EXTRACT
+    // ═══════════════════════════════════════
     const extractActions = (acoes || []).filter((a: any) => a.tipo === "extrair");
     for (const action of extractActions) {
       const terr = terrMap.get(action.origem_id || action.destino_id);
@@ -137,7 +159,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 5. RESOLVE COMBAT
+    // ═══════════════════════════════════════
+    // 5. RESOLVE COMBAT (with 0.6x damage multiplier)
+    // ═══════════════════════════════════════
     const attackActions = (acoes || []).filter((a: any) => a.tipo === "atacar");
     for (const action of attackActions) {
       const origem = terrMap.get(action.origem_id);
@@ -165,12 +189,13 @@ Deno.serve(async (req) => {
       const defBonus = destino.dono_id ? getHouseBonus(playerEstados, destino.dono_id) : {};
       const ataque = origem.forca + atkRoll + (atkBonus.ataque || 0);
       const defesa = destino.forca + defRoll + destino.defesa_base + (defBonus.defesa || 0);
-      const resultado = ataque - defesa;
+      const rawResultado = ataque - defesa;
+      const resultado = Math.round(rawResultado * COMBAT_DAMAGE_MULT);
 
       logs.push({
         partida_id, turno_numero: turnoNum, nivel: "publico",
-        mensagem: `Combate: ${origem.nome}(${origem.forca}+${atkRoll}) vs ${destino.nome}(${destino.forca}+${defRoll}+${destino.defesa_base}) = ${resultado > 0 ? "VITÓRIA" : resultado < 0 ? "DERROTA" : "EMPATE"}`,
-        dados: { atkRoll, defRoll, resultado },
+        mensagem: `Combate: ${origem.nome}(${origem.forca}+${atkRoll}) vs ${destino.nome}(${destino.forca}+${defRoll}+${destino.defesa_base}) = ${resultado > 0 ? "VITÓRIA" : resultado < 0 ? "DERROTA" : "EMPATE"} (×${COMBAT_DAMAGE_MULT})`,
+        dados: { atkRoll, defRoll, resultado, rawResultado, damageMultiplier: COMBAT_DAMAGE_MULT },
       });
 
       if (resultado > 0) {
@@ -180,12 +205,68 @@ Deno.serve(async (req) => {
       } else if (resultado < 0) {
         destino.forca = Math.max(0, destino.forca - Math.abs(resultado));
       } else {
-        origem.forca = Math.max(1, origem.forca - 10);
-        destino.forca = Math.max(0, destino.forca - 10);
+        origem.forca = Math.max(1, origem.forca - 6);
+        destino.forca = Math.max(0, destino.forca - 6);
       }
     }
 
-    // 6. SANDWORM EVENT — Dice-based deterministic system
+    // ═══════════════════════════════════════
+    // 6. SALARY SYSTEM (every 3 turns)
+    // ═══════════════════════════════════════
+    const isSalaryCycle = turnoNum > 0 && turnoNum % SALARY_CYCLE === 0;
+    const salaryData: Record<string, { cost: number; paid: boolean; deserted: number }> = {};
+
+    if (isSalaryCycle) {
+      const terrArray = Array.from(terrMap.values());
+
+      for (const pe of playerEstados) {
+        if (!pe.ativo) continue;
+        const ownedTerrs = terrArray.filter((t: any) => t.dono_id === pe.player_id);
+        const totalTroops = ownedTerrs.reduce((sum: number, t: any) => sum + t.forca, 0);
+        const payable = Math.floor(totalTroops * SALARY_TROOP_PCT);
+        const cost = payable * SALARY_COST;
+
+        if (pe.spice >= cost) {
+          pe.spice -= cost;
+          salaryData[pe.player_id] = { cost, paid: true, deserted: 0 };
+          logs.push({
+            partida_id, turno_numero: turnoNum, nivel: "jogador",
+            mensagem: `💰 Salários pagos: ${cost} spice (${payable} tropas mantidas)`,
+            dados: { action: "salary", cost, payable }, player_id: pe.player_id,
+          });
+        } else {
+          // Can't fully pay — desertion
+          const canPay = pe.spice;
+          const percentPaid = cost > 0 ? canPay / cost : 0;
+          const troopsMaintained = Math.floor(payable * percentPaid);
+          const troopsLost = payable - troopsMaintained;
+          pe.spice = 0;
+
+          // Distribute losses proportionally across territories
+          let remainingLoss = troopsLost;
+          // Sort by force descending so we remove from strongest first
+          const sorted = [...ownedTerrs].sort((a: any, b: any) => b.forca - a.forca);
+          for (const t of sorted) {
+            if (remainingLoss <= 0) break;
+            const maxLoss = Math.floor(t.forca * MAX_SALARY_LOSS);
+            const loss = Math.min(remainingLoss, maxLoss);
+            t.forca = Math.max(MIN_FORCE, t.forca - loss);
+            remainingLoss -= loss;
+          }
+
+          salaryData[pe.player_id] = { cost, paid: false, deserted: troopsLost };
+          logs.push({
+            partida_id, turno_numero: turnoNum, nivel: "publico",
+            mensagem: `⚠️ Deserção! ${troopsLost} tropas abandonaram por falta de pagamento`,
+            dados: { action: "desertion", cost, canPay, troopsLost }, player_id: pe.player_id,
+          });
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════
+    // 7. SANDWORM EVENT (with progressive pressure)
+    // ═══════════════════════════════════════
     const wormDie1 = d6();
     const wormDie2 = d6();
     const wormActivated = wormDie1 === wormDie2;
@@ -197,10 +278,15 @@ Deno.serve(async (req) => {
     const eventos: Array<{ turno_id: string; partida_id: string; tipo: string; descricao: string; territorios_afetados: string[] }> = [];
     const terrArray = Array.from(terrMap.values());
 
+    // Progressive pressure multiplier
+    let pressureMult = 1.0;
+    if (turnoNum >= PRESSURE_ESCALATE) {
+      pressureMult = 1.25;
+    }
+
     if (wormActivated) {
-      const wormStrength = (wormDie1 + wormDie2) * 10;
+      const wormStrength = Math.round((wormDie1 + wormDie2) * 10 * pressureMult);
       
-      // Target selection: weighted by spice production
       const totalWeight = terrArray.reduce((sum: number, t: any) => sum + t.producao_spice, 0);
       let roll = Math.random() * totalWeight;
       let target = terrArray[0];
@@ -209,29 +295,24 @@ Deno.serve(async (req) => {
         if (roll <= 0) { target = t; break; }
       }
 
-      // Fremen immunity: reduce worm damage by 50%
       const ownerBonus = target.dono_id ? getHouseBonus(playerEstados, target.dono_id) : {};
       const isFremen = playerEstados.find((p: any) => p.player_id === target.dono_id)?.house === 'fremen';
 
-      // Worm combat resolution
       const wormAttack = wormStrength + d10();
       const terrDefense = target.forca + target.defesa_base + d10() + (ownerBonus.defesa || 0);
       const wormResult = wormAttack - terrDefense;
 
       let resultType: string;
       if (wormResult > 0) {
-        // Worm wins: territory loses 50% force (25% for Fremen), 20% defense
         const forceLoss = isFremen ? 0.75 : 0.5;
         const defLoss = isFremen ? 0.9 : 0.8;
         target.forca = Math.max(0, Math.floor(target.forca * forceLoss));
         target.defesa_base = Math.max(0, Math.floor(target.defesa_base * defLoss));
         resultType = "attack_wins";
       } else if (wormResult < 0) {
-        // Territory defends: loses 20% force
         target.forca = Math.max(0, Math.floor(target.forca * 0.8));
         resultType = "defense_wins";
       } else {
-        // Draw: both lose 30%
         target.forca = Math.max(0, Math.floor(target.forca * 0.7));
         target.defesa_base = Math.max(0, Math.floor(target.defesa_base * 0.7));
         resultType = "draw";
@@ -263,34 +344,48 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 7. OTHER RANDOM EVENTS (excluding worm which is now deterministic)
+    // ═══════════════════════════════════════
+    // 8. OTHER RANDOM EVENTS (progressive pressure)
+    // ═══════════════════════════════════════
     const otherEvents = ["tempestade", "superproducao", "instabilidade"];
-    if (Math.random() < 0.35) {
+    const eventChance = turnoNum >= PRESSURE_START
+      ? 0.35 + (turnoNum - PRESSURE_START) * 0.10
+      : 0.35;
+    const cappedChance = Math.min(eventChance, 0.85);
+
+    if (Math.random() < cappedChance) {
       const eventType = otherEvents[Math.floor(Math.random() * otherEvents.length)];
+      const stormMultiplier = turnoNum >= PRESSURE_ESCALATE ? 1.5 : 1.0;
+
       switch (eventType) {
         case "tempestade": {
-          const affected = terrArray.filter(() => Math.random() < 0.3);
-          for (const t of affected) t.forca = Math.max(0, t.forca - 15);
-          eventos.push({ turno_id, partida_id, tipo: "tempestade", descricao: `Tempestade de areia! ${affected.length} territórios (-15 força)`, territorios_afetados: affected.map((t: any) => t.id) });
-          logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `🌪️ Tempestade de areia afetou ${affected.length} territórios!`, dados: {} });
+          const stormChance = turnoNum >= PRESSURE_ESCALATE ? 0.45 : 0.3;
+          const affected = terrArray.filter(() => Math.random() < stormChance);
+          const damage = Math.round(15 * stormMultiplier);
+          for (const t of affected) t.forca = Math.max(0, t.forca - damage);
+          eventos.push({ turno_id, partida_id, tipo: "tempestade", descricao: `Tempestade de areia! ${affected.length} territórios (-${damage} força)`, territorios_afetados: affected.map((t: any) => t.id) });
+          logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `🌪️ Tempestade de areia afetou ${affected.length} territórios! (-${damage})`, dados: {} });
           break;
         }
         case "superproducao": {
-          for (const pe of playerEstados) pe.spice = (pe.spice || 0) + 20;
-          eventos.push({ turno_id, partida_id, tipo: "superproducao", descricao: "Superprodução de Spice! +20 para todos", territorios_afetados: [] });
-          logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `✨ Superprodução de Spice! +20 para todos!`, dados: {} });
+          for (const pe of playerEstados) pe.spice = (pe.spice || 0) + SUPERPRODUCTION_BONUS;
+          eventos.push({ turno_id, partida_id, tipo: "superproducao", descricao: `Superprodução de Spice! +${SUPERPRODUCTION_BONUS} para todos`, territorios_afetados: [] });
+          logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `✨ Superprodução de Spice! +${SUPERPRODUCTION_BONUS} para todos!`, dados: {} });
           break;
         }
         case "instabilidade": {
-          for (const t of terrArray) t.defesa_base = Math.max(0, t.defesa_base - 5);
-          eventos.push({ turno_id, partida_id, tipo: "instabilidade", descricao: "Instabilidade política! -5 defesa global", territorios_afetados: terrArray.map((t: any) => t.id) });
-          logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `⚡ Instabilidade política! -5 defesa global`, dados: {} });
+          const debuff = turnoNum >= PRESSURE_ESCALATE ? 8 : 5;
+          for (const t of terrArray) t.defesa_base = Math.max(0, t.defesa_base - debuff);
+          eventos.push({ turno_id, partida_id, tipo: "instabilidade", descricao: `Instabilidade política! -${debuff} defesa global`, territorios_afetados: terrArray.map((t: any) => t.id) });
+          logs.push({ partida_id, turno_numero: turnoNum, nivel: "publico", mensagem: `⚡ Instabilidade política! -${debuff} defesa global`, dados: {} });
           break;
         }
       }
     }
 
-    // 8. REGION BONUS
+    // ═══════════════════════════════════════
+    // 9. REGION BONUS (reduced to 10)
+    // ═══════════════════════════════════════
     for (const region of REGIONS) {
       const regionTerrs = terrArray.filter((t: any) => t.regiao === region);
       if (regionTerrs.length === 0) continue;
@@ -309,11 +404,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 9. Troop regeneration (+5 per owned territory, +8 for Tleilaxu)
+    // ═══════════════════════════════════════
+    // 10. TROOP REGENERATION (+3 per territory, +6 for Tleilaxu)
+    // ═══════════════════════════════════════
     for (const t of terrArray) {
       if (t.dono_id) {
         const bonus = getHouseBonus(playerEstados, t.dono_id);
-        t.forca = Math.min(100, t.forca + 5 + (bonus.regen || 0));
+        t.forca = Math.min(100, t.forca + TROOP_REGEN + (bonus.regen || 0));
       }
     }
 
@@ -323,7 +420,9 @@ Deno.serve(async (req) => {
       if (terr) terr.defesa_base = Math.max(0, terr.defesa_base - 10);
     }
 
-    // CHECK VICTORY
+    // ═══════════════════════════════════════
+    // CHECK VICTORY (70% territory or 800 spice)
+    // ═══════════════════════════════════════
     let vencedorId = null;
     const totalTerr = terrArray.length;
     const ownerCounts = new Map<string, number>();
@@ -331,15 +430,17 @@ Deno.serve(async (req) => {
       if (t.dono_id) ownerCounts.set(t.dono_id, (ownerCounts.get(t.dono_id) || 0) + 1);
     }
     for (const [pid, count] of ownerCounts) {
-      if (count / totalTerr >= 0.6) vencedorId = pid;
+      if (count / totalTerr >= VICTORY_TERRITORY_PCT) vencedorId = pid;
     }
     for (const pe of playerEstados) {
-      if (pe.spice >= 500) vencedorId = pe.player_id;
+      if (pe.spice >= VICTORY_SPICE) vencedorId = pe.player_id;
     }
     const activePlayers = playerEstados.filter((pe: any) => pe.ativo);
     if (activePlayers.length === 1) vencedorId = activePlayers[0].player_id;
 
+    // ═══════════════════════════════════════
     // UPDATE DATABASE
+    // ═══════════════════════════════════════
     for (const t of terrArray) {
       await supabase.from("territorios")
         .update({ forca: t.forca, dono_id: t.dono_id, defesa_base: t.defesa_base })
@@ -366,7 +467,14 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, turno: turnoNum, vencedor: vencedorId, wormEvent: wormEventData }),
+      JSON.stringify({
+        success: true,
+        turno: turnoNum,
+        vencedor: vencedorId,
+        wormEvent: wormEventData,
+        salaryData: isSalaryCycle ? salaryData : null,
+        nextSalaryIn: SALARY_CYCLE - ((turnoNum + 1) % SALARY_CYCLE),
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
