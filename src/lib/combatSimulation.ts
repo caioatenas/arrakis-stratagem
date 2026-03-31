@@ -1,4 +1,5 @@
 // Monte Carlo combat simulation for preview
+// Uses 0.6x damage multiplier to match backend
 export interface CombatPreviewResult {
   chanceVitoria: number;
   chanceDerrota: number;
@@ -9,6 +10,8 @@ export interface CombatPreviewResult {
   avgDefenderRemaining: number;
   riskLevel: 'low' | 'medium' | 'high';
 }
+
+const COMBAT_DAMAGE_MULT = 0.6;
 
 function d10(): number {
   return Math.floor(Math.random() * 10) + 1;
@@ -29,29 +32,25 @@ export function simulateCombat(
   for (let i = 0; i < simulations; i++) {
     const atkRoll = attackerForce + d10();
     const defRoll = defenderForce + d10() + defenseBase;
+    const rawResult = atkRoll - defRoll;
+    const resultado = Math.round(rawResult * COMBAT_DAMAGE_MULT);
 
-    if (atkRoll > defRoll) {
+    if (resultado > 0) {
       wins++;
-      // Attacker wins: defender loses proportional force
-      const ratio = atkRoll / (atkRoll + defRoll);
-      const defLoss = Math.max(1, Math.ceil(defenderForce * ratio));
-      const attLoss = Math.max(0, Math.floor(attackerForce * (1 - ratio) * 0.5));
-      totalDefLoss += Math.min(defLoss, defenderForce);
-      totalAttLoss += Math.min(attLoss, attackerForce - 1);
-    } else if (defRoll > atkRoll) {
+      // Victory: attacker loses 70% of force, defender conquered
+      const attLoss = Math.max(0, Math.floor(attackerForce * 0.7));
+      totalAttLoss += attLoss;
+      totalDefLoss += defenderForce;
+    } else if (resultado < 0) {
       losses++;
-      const ratio = defRoll / (atkRoll + defRoll);
-      const attLoss = Math.max(1, Math.ceil(attackerForce * ratio));
-      const defLoss = Math.max(0, Math.floor(defenderForce * (1 - ratio) * 0.3));
-      totalAttLoss += Math.min(attLoss, attackerForce - 1);
+      // Defeat: defender loses dampened damage
+      const defLoss = Math.abs(resultado);
+      totalAttLoss += 0;
       totalDefLoss += Math.min(defLoss, defenderForce);
     } else {
       draws++;
-      // Draw: both lose some
-      const attLoss = Math.max(1, Math.floor(attackerForce * 0.3));
-      const defLoss = Math.max(1, Math.floor(defenderForce * 0.3));
-      totalAttLoss += attLoss;
-      totalDefLoss += defLoss;
+      totalAttLoss += 6;
+      totalDefLoss += 6;
     }
   }
 
