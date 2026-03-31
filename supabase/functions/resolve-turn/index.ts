@@ -220,9 +220,11 @@ Deno.serve(async (req) => {
 
       let resultType: string;
       if (wormResult > 0) {
-        // Worm wins: territory loses 50% force, 20% defense
-        target.forca = Math.max(0, Math.floor(target.forca * 0.5));
-        target.defesa_base = Math.max(0, Math.floor(target.defesa_base * 0.8));
+        // Worm wins: territory loses 50% force (25% for Fremen), 20% defense
+        const forceLoss = isFremen ? 0.75 : 0.5;
+        const defLoss = isFremen ? 0.9 : 0.8;
+        target.forca = Math.max(0, Math.floor(target.forca * forceLoss));
+        target.defesa_base = Math.max(0, Math.floor(target.defesa_base * defLoss));
         resultType = "attack_wins";
       } else if (wormResult < 0) {
         // Territory defends: loses 20% force
