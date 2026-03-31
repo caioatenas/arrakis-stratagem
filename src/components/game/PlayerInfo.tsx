@@ -1,5 +1,6 @@
 import type { PlayerEstado } from '@/hooks/useGameState';
 import type { Player } from '@/hooks/usePlayer';
+import { FACTIONS } from '@/lib/factions';
 
 interface PlayerInfoProps {
   player: Player | null;
