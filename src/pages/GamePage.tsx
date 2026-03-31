@@ -13,6 +13,8 @@ import { motion } from 'framer-motion';
 import { Tutorial } from '@/components/game/Tutorial';
 import { MapLegend } from '@/components/game/map/MapLegend';
 import { WormEventOverlay, type WormEventData } from '@/components/game/WormEventOverlay';
+import { VictoryProgress } from '@/components/game/VictoryProgress';
+import { TurnAnimationQueue } from '@/components/game/TurnAnimationQueue';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function GamePage() {
