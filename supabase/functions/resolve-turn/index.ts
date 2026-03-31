@@ -161,8 +161,10 @@ Deno.serve(async (req) => {
 
       const atkRoll = d10();
       const defRoll = d10();
-      const ataque = origem.forca + atkRoll;
-      const defesa = destino.forca + defRoll + destino.defesa_base;
+      const atkBonus = getHouseBonus(playerEstados, action.player_id);
+      const defBonus = destino.dono_id ? getHouseBonus(playerEstados, destino.dono_id) : {};
+      const ataque = origem.forca + atkRoll + (atkBonus.ataque || 0);
+      const defesa = destino.forca + defRoll + destino.defesa_base + (defBonus.defesa || 0);
       const resultado = ataque - defesa;
 
       logs.push({
