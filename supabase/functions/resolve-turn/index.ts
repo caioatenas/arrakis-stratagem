@@ -303,9 +303,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 9. Troop regeneration (+5 per owned territory)
+    // 9. Troop regeneration (+5 per owned territory, +8 for Tleilaxu)
     for (const t of terrArray) {
-      if (t.dono_id) t.forca = Math.min(100, t.forca + 5);
+      if (t.dono_id) {
+        const bonus = getHouseBonus(playerEstados, t.dono_id);
+        t.forca = Math.min(100, t.forca + 5 + (bonus.regen || 0));
+      }
     }
 
     // Reset fortification (lasts 1 turn)
