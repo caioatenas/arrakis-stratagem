@@ -209,9 +209,13 @@ Deno.serve(async (req) => {
         if (roll <= 0) { target = t; break; }
       }
 
+      // Fremen immunity: reduce worm damage by 50%
+      const ownerBonus = target.dono_id ? getHouseBonus(playerEstados, target.dono_id) : {};
+      const isFremen = playerEstados.find((p: any) => p.player_id === target.dono_id)?.house === 'fremen';
+
       // Worm combat resolution
       const wormAttack = wormStrength + d10();
-      const terrDefense = target.forca + target.defesa_base + d10();
+      const terrDefense = target.forca + target.defesa_base + d10() + (ownerBonus.defesa || 0);
       const wormResult = wormAttack - terrDefense;
 
       let resultType: string;
