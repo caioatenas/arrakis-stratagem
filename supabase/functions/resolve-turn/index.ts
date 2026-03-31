@@ -16,6 +16,25 @@ function d6(): number {
 const REGIONS = ["norte", "centro", "sul", "leste"];
 const REGION_BONUS_SPICE = 15;
 
+// House bonus system
+const HOUSE_BONUSES: Record<string, { ataque?: number; defesa?: number; acoes?: number; spice_mult?: number; regen?: number }> = {
+  atreides:      { defesa: 10 },
+  harkonnen:     { ataque: 10 },
+  corrino:       { acoes: 1 },
+  fremen:        {},           // Handled separately (worm immunity)
+  fenring:       {},           // Spy bonus handled in espionage
+  ix:            { spice_mult: 15 },
+  bene_gesserit: {},
+  guilda:        {},           // Movement bonus handled in move
+  tleilaxu:      { regen: 3 },
+};
+
+function getHouseBonus(playerEstados: any[], playerId: string): typeof HOUSE_BONUSES[string] {
+  const pe = playerEstados.find((p: any) => p.player_id === playerId);
+  if (!pe?.house) return {};
+  return HOUSE_BONUSES[pe.house] || {};
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
