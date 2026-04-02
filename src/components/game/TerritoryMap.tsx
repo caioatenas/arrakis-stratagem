@@ -11,6 +11,8 @@ import { FactionBanner } from './map/FactionBanner';
 import { SpiceParticles } from './map/SpiceParticles';
 import { WormExplosion } from './map/WormExplosion';
 import { MovementAnimation } from './map/MovementAnimation';
+import { HoverCombatPreview } from './map/HoverCombatPreview';
+import { simulateCombat } from '@/lib/combatSimulation';
 import mapBg from '@/assets/map-background.jpg';
 
 interface TerritoryMapProps {
