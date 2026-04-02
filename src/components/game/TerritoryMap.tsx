@@ -262,9 +262,24 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
             destinationId={movementFlow.destinationId}
             quantity={movementFlow.quantity}
             playerColor={playerColor}
+            tipo={movementFlow.actionType || 'mover'}
             onComplete={onAnimationComplete}
           />
         )}
+
+        {/* Hover combat preview overlay on map */}
+        <AnimatePresence>
+          {hoverCombatData && (
+            <HoverCombatPreview
+              attackerForce={movementFlow.quantity}
+              defenderForce={hoverCombatData.defenderForce}
+              defenseBase={hoverCombatData.defenseBase}
+              x={hoverCombatData.x}
+              y={hoverCombatData.y}
+              attackerColor={playerColor}
+            />
+          )}
+        </AnimatePresence>
 
         {/* Worm explosion effect */}
         {wormExplosionTarget && (
