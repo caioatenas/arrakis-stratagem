@@ -6,6 +6,7 @@ interface MovementAnimationProps {
   destinationId: string;
   quantity: number;
   playerColor: string;
+  tipo?: 'mover' | 'atacar';
   onComplete: () => void;
 }
 
