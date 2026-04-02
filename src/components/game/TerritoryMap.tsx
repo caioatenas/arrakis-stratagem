@@ -296,7 +296,17 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
         </motion.div>
       )}
 
-      
+      {/* Strategic mode toggle */}
+      <button
+        onClick={() => setStrategicMode(s => !s)}
+        className={`absolute bottom-3 right-3 z-20 px-3 py-1.5 rounded-lg text-xs font-display tracking-wider transition-all ${
+          strategicMode
+            ? 'bg-primary text-primary-foreground shadow-lg'
+            : 'bg-card/80 text-muted-foreground border border-border hover:bg-card'
+        }`}
+      >
+        {strategicMode ? '⚔ TÁTICO' : '👁 VISÃO TÁTICA'}
+      </button>
     </div>
   );
 }
