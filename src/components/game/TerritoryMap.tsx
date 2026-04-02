@@ -43,6 +43,7 @@ function getTerritoryPath(cx: number, cy: number, r: number, seed: number): stri
 
 export function TerritoryMap({ territories, playerEstados, selectedTerritory, onSelectTerritory, currentPlayerId, movementFlow, playerColor, onAnimationComplete, wormExplosionTarget }: TerritoryMapProps) {
   const [hoveredTerritory, setHoveredTerritory] = useState<string | null>(null);
+  const [strategicMode, setStrategicMode] = useState(false);
 
   const getFaction = (donoId: string | null) => {
     if (!donoId) return null;

@@ -8,6 +8,13 @@ interface TroopPinProps {
   faction: Faction | null;
   isSelected: boolean;
   defesaBase: number;
+  strategicMode?: boolean;
+}
+
+function getStrengthColor(forca: number): string {
+  if (forca <= 20) return '#ef4444'; // red - weak
+  if (forca <= 50) return '#eab308'; // yellow - medium
+  return '#22c55e'; // green - strong
 }
 
 function getPinSize(forca: number): { r: number; tier: 'small' | 'medium' | 'large' } {
@@ -16,27 +23,27 @@ function getPinSize(forca: number): { r: number; tier: 'small' | 'medium' | 'lar
   return { r: 15, tier: 'small' };
 }
 
-function getDensityRings(forca: number): number {
-  if (forca >= 61) return 2;
-  if (forca >= 21) return 1;
-  return 0;
+function getTroopIcons(forca: number): number {
+  return Math.min(Math.floor(forca / 20), 5);
 }
 
-export function TroopPin({ x, y, forca, faction, isSelected, defesaBase }: TroopPinProps) {
+export function TroopPin({ x, y, forca, faction, isSelected, defesaBase, strategicMode }: TroopPinProps) {
   const { r, tier } = getPinSize(forca);
-  const rings = getDensityRings(forca);
   const gradientId = faction ? `pin-${faction.id}` : 'pin-neutral';
   const highDefense = defesaBase >= 7;
+  const strengthColor = getStrengthColor(forca);
+  const troopIconCount = getTroopIcons(forca);
+  const fontSize = tier === 'large' ? 20 : tier === 'medium' ? 17 : 14;
 
   return (
     <g>
-      {/* Density rings */}
-      {rings >= 1 && (
+      {/* Density rings - only in normal mode */}
+      {!strategicMode && forca >= 21 && (
         <circle cx={x} cy={y} r={r + 8} fill="none"
           stroke={faction?.color || 'hsl(30,12%,40%)'} strokeWidth={1.2}
           opacity={0.4} className="density-ring-pulse" />
       )}
-      {rings >= 2 && (
+      {!strategicMode && forca >= 61 && (
         <motion.circle cx={x} cy={y} r={r + 14} fill="none"
           stroke={faction?.color || 'hsl(30,12%,40%)'} strokeWidth={0.8}
           opacity={0.25} className="density-ring-pulse"
@@ -44,7 +51,7 @@ export function TroopPin({ x, y, forca, faction, isSelected, defesaBase }: Troop
       )}
 
       {/* Large glow for 61+ */}
-      {tier === 'large' && (
+      {!strategicMode && tier === 'large' && (
         <circle cx={x} cy={y} r={r + 6} fill={faction?.color || '#555'}
           fillOpacity={0.15} filter="url(#glow-soft)" />
       )}
@@ -57,33 +64,65 @@ export function TroopPin({ x, y, forca, faction, isSelected, defesaBase }: Troop
           filter="url(#shield-glow)" opacity={0.5} />
       )}
 
-      {/* Pin base - shield shape */}
+      {/* Pin base circle */}
       <motion.circle cx={x} cy={y} r={r}
-        fill={`url(#${gradientId})`}
-        stroke={isSelected ? '#fff' : (faction?.color || 'hsl(30,12%,50%)')}
-        strokeWidth={isSelected ? 2.5 : 1.5}
+        fill={strategicMode ? 'hsl(0,0%,15%)' : `url(#${gradientId})`}
+        stroke={isSelected ? '#fff' : strengthColor}
+        strokeWidth={isSelected ? 3 : 2}
         filter="url(#drop-shadow)"
-        animate={{ scale: isSelected ? 1.08 : 1 }}
+        animate={{ scale: isSelected ? 1.15 : 1 }}
         style={{ transformOrigin: `${x}px ${y}px` }}
         transition={{ type: 'spring', stiffness: 300, damping: 25 }}
       />
 
       {/* Inner highlight */}
-      <circle cx={x} cy={y - r * 0.2} r={r * 0.5}
-        fill="white" fillOpacity={0.12} />
+      {!strategicMode && (
+        <circle cx={x} cy={y - r * 0.2} r={r * 0.5}
+          fill="white" fillOpacity={0.12} />
+      )}
 
-      {/* Troop count */}
+      {/* === TROOP COUNT - PRIMARY VISUAL === */}
       <text x={x} y={y + 1} textAnchor="middle" dominantBaseline="central"
-        fill="#fff" fontSize={tier === 'large' ? 16 : tier === 'medium' ? 14 : 12}
-        fontWeight="bold" fontFamily="Rajdhani, sans-serif"
-        style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+        fill="#FFFFFF" fontSize={fontSize}
+        fontWeight="900" fontFamily="Rajdhani, sans-serif"
+        stroke="rgba(0,0,0,0.6)" strokeWidth={0.8}
+        style={{ textShadow: '0 2px 6px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.5)' }}>
         {forca}
       </text>
 
-      {/* Faction symbol (small, below count) */}
-      {faction && (
-        <text x={x} y={y + r + 2} textAnchor="middle" dominantBaseline="hanging"
-          fontSize="8" opacity={0.7}>
+      {/* Strength color glow behind number */}
+      <text x={x} y={y + 1} textAnchor="middle" dominantBaseline="central"
+        fill={strengthColor} fontSize={fontSize}
+        fontWeight="900" fontFamily="Rajdhani, sans-serif"
+        opacity={0.4} filter="url(#glow-soft)">
+        {forca}
+      </text>
+
+      {/* === STRENGTH BAR === */}
+      <rect x={x - 20} y={y + r + 3} width={40} height={4} rx={2}
+        fill="rgba(0,0,0,0.5)" />
+      <rect x={x - 20} y={y + r + 3} width={Math.min((forca / 100) * 40, 40)} height={4} rx={2}
+        fill={strengthColor} opacity={0.85} />
+
+      {/* === TROOP ICONS (pips) === */}
+      {!strategicMode && troopIconCount > 0 && (
+        <g>
+          {Array.from({ length: troopIconCount }).map((_, i) => {
+            const spread = (troopIconCount - 1) * 5;
+            const iconX = x - spread / 2 + i * 5;
+            const iconY = y - r - 6;
+            return (
+              <circle key={i} cx={iconX} cy={iconY} r={2}
+                fill={strengthColor} stroke="rgba(0,0,0,0.4)" strokeWidth={0.5} />
+            );
+          })}
+        </g>
+      )}
+
+      {/* Faction symbol (small, below bar) - only in normal mode */}
+      {!strategicMode && faction && (
+        <text x={x} y={y + r + 12} textAnchor="middle" dominantBaseline="hanging"
+          fontSize="7" opacity={0.6}>
           {faction.symbol}
         </text>
       )}
