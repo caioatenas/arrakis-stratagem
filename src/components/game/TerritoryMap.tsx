@@ -43,6 +43,7 @@ function getTerritoryPath(cx: number, cy: number, r: number, seed: number): stri
 
 export function TerritoryMap({ territories, playerEstados, selectedTerritory, onSelectTerritory, currentPlayerId, movementFlow, playerColor, onAnimationComplete, wormExplosionTarget }: TerritoryMapProps) {
   const [hoveredTerritory, setHoveredTerritory] = useState<string | null>(null);
+  const [strategicMode, setStrategicMode] = useState(false);
 
   const getFaction = (donoId: string | null) => {
     if (!donoId) return null;
@@ -173,7 +174,7 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
               className="cursor-pointer"
               style={{ transition: 'opacity 0.3s', opacity: dimmed ? 0.2 : 1 }}>
 
-              <SpiceParticles x={px} y={py} production={t.producao_spice} tipo={tipo} />
+              {!strategicMode && <SpiceParticles x={px} y={py} production={t.producao_spice} tipo={tipo} />}
 
               <motion.path d={getTerritoryPath(px, py, outerR, seed)}
                 fill={color} fillOpacity={isSelected ? 0.35 : isAttackTarget && isHovered ? 0.35 : isMoveOnly && isHovered ? 0.3 : isHovered ? 0.25 : 0.12}
@@ -206,22 +207,28 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
                   transition={{ repeat: Infinity, duration: 1 }} />
               )}
 
-              {faction && t.dono_id && (
+              {!strategicMode && faction && t.dono_id && (
                 <FactionBanner x={px} y={py} faction={faction} />
               )}
 
-              <TroopPin x={px} y={py} forca={t.forca} faction={faction} isSelected={isSelected} defesaBase={t.defesa_base} />
+              <TroopPin x={px} y={py} forca={t.forca} faction={faction} isSelected={isSelected} defesaBase={t.defesa_base} strategicMode={strategicMode} />
 
-              <text x={px} y={py + outerR + 16} textAnchor="middle" fill="hsl(38, 25%, 70%)"
-                fontSize="8" fontFamily="Cinzel, serif" letterSpacing="0.5">
-                {t.nome}
-              </text>
+              {/* Territory name - smaller, below strength bar */}
+              {!strategicMode && (
+                <text x={px} y={py + outerR + 22} textAnchor="middle" fill="hsl(38, 25%, 60%)"
+                  fontSize="6.5" fontFamily="Cinzel, serif" letterSpacing="0.3" opacity={0.8}>
+                  {t.nome}
+                </text>
+              )}
 
-              <text x={px} y={py - outerR - 8} textAnchor="middle"
-                fill={tipo === 'rico' ? 'hsl(45, 80%, 65%)' : 'hsl(210, 70%, 65%)'}
-                fontSize="9" fontFamily="Rajdhani, sans-serif" filter="url(#glow-soft)">
-                ⟡ {t.producao_spice}
-              </text>
+              {/* Spice production - minimal icon */}
+              {!strategicMode && (
+                <text x={px + outerR - 2} y={py - outerR + 6} textAnchor="end"
+                  fill={tipo === 'rico' ? 'hsl(45, 80%, 65%)' : 'hsl(210, 50%, 55%)'}
+                  fontSize="7" fontFamily="Rajdhani, sans-serif" opacity={0.7}>
+                  ⟡{t.producao_spice}
+                </text>
+              )}
             </g>
           );
         })}
@@ -289,7 +296,17 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
         </motion.div>
       )}
 
-      
+      {/* Strategic mode toggle */}
+      <button
+        onClick={() => setStrategicMode(s => !s)}
+        className={`absolute bottom-3 right-3 z-20 px-3 py-1.5 rounded-lg text-xs font-display tracking-wider transition-all ${
+          strategicMode
+            ? 'bg-primary text-primary-foreground shadow-lg'
+            : 'bg-card/80 text-muted-foreground border border-border hover:bg-card'
+        }`}
+      >
+        {strategicMode ? '⚔ TÁTICO' : '👁 VISÃO TÁTICA'}
+      </button>
     </div>
   );
 }
