@@ -119,6 +119,18 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
     return { path: `M ${origin.pos_x} ${origin.pos_y} Q ${cx} ${cy} ${dest.pos_x} ${dest.pos_y}`, dest };
   }, [isInMoveMode, isAttackMode, hoveredTerritory, movementFlow.originId, moveOriginNeighbors, territories, currentPlayerId]);
 
+  // Combat preview data for hover target in attack mode
+  const hoverCombatData = useMemo(() => {
+    if (!isAttackMode || !hoveredTerritory || !movementFlow.originId) return null;
+    if (!moveOriginNeighbors.has(hoveredTerritory)) return null;
+    const ht = territories.find(t => t.id === hoveredTerritory);
+    if (!ht || !ht.dono_id || ht.dono_id === currentPlayerId) return null;
+    const def = TERRITORIES.find(d => d.id === hoveredTerritory);
+    if (!def) return null;
+    const result = simulateCombat(movementFlow.quantity, ht.forca, ht.defesa_base, 100);
+    return { x: def.pos_x, y: def.pos_y, result, defenderForce: ht.forca, defenseBase: ht.defesa_base };
+  }, [isAttackMode, hoveredTerritory, movementFlow.originId, movementFlow.quantity, moveOriginNeighbors, territories, currentPlayerId]);
+
   return (
     <div className="relative w-full h-full min-h-[600px] rounded-xl overflow-hidden">
       <img src={mapBg} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: 'blur(2px)' }} />
