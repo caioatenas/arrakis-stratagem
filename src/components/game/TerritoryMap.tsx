@@ -11,6 +11,8 @@ import { FactionBanner } from './map/FactionBanner';
 import { SpiceParticles } from './map/SpiceParticles';
 import { WormExplosion } from './map/WormExplosion';
 import { MovementAnimation } from './map/MovementAnimation';
+import { HoverCombatPreview } from './map/HoverCombatPreview';
+import { simulateCombat } from '@/lib/combatSimulation';
 import mapBg from '@/assets/map-background.jpg';
 
 interface TerritoryMapProps {
@@ -117,6 +119,18 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
     return { path: `M ${origin.pos_x} ${origin.pos_y} Q ${cx} ${cy} ${dest.pos_x} ${dest.pos_y}`, dest };
   }, [isInMoveMode, isAttackMode, hoveredTerritory, movementFlow.originId, moveOriginNeighbors, territories, currentPlayerId]);
 
+  // Combat preview data for hover target in attack mode
+  const hoverCombatData = useMemo(() => {
+    if (!isAttackMode || !hoveredTerritory || !movementFlow.originId) return null;
+    if (!moveOriginNeighbors.has(hoveredTerritory)) return null;
+    const ht = territories.find(t => t.id === hoveredTerritory);
+    if (!ht || !ht.dono_id || ht.dono_id === currentPlayerId) return null;
+    const def = TERRITORIES.find(d => d.id === hoveredTerritory);
+    if (!def) return null;
+    const result = simulateCombat(movementFlow.quantity, ht.forca, ht.defesa_base, 100);
+    return { x: def.pos_x, y: def.pos_y, result, defenderForce: ht.forca, defenseBase: ht.defesa_base };
+  }, [isAttackMode, hoveredTerritory, movementFlow.originId, movementFlow.quantity, moveOriginNeighbors, territories, currentPlayerId]);
+
   return (
     <div className="relative w-full h-full min-h-[600px] rounded-xl overflow-hidden">
       <img src={mapBg} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: 'blur(2px)' }} />
@@ -138,11 +152,19 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
         {hoverPreviewLine && (
           <g>
             <path d={hoverPreviewLine.path} fill="none"
-              stroke={isAttackMode ? 'hsl(0, 70%, 50%)' : playerColor}
+              stroke={isAttackMode
+                ? (hoverCombatData
+                  ? hoverCombatData.result.riskLevel === 'low' ? '#22c55e' : hoverCombatData.result.riskLevel === 'medium' ? '#eab308' : '#ef4444'
+                  : 'hsl(0, 70%, 50%)')
+                : playerColor}
               strokeWidth={isAttackMode ? 3 : 2}
               strokeDasharray={isAttackMode ? '12,6' : '8,5'} opacity={0.6} filter="url(#glow-soft)" />
             <circle cx={hoverPreviewLine.dest.pos_x} cy={hoverPreviewLine.dest.pos_y} r={44}
-              fill="none" stroke={isAttackMode ? 'hsl(0, 70%, 50%)' : playerColor}
+              fill="none" stroke={isAttackMode
+                ? (hoverCombatData
+                  ? hoverCombatData.result.riskLevel === 'low' ? '#22c55e' : hoverCombatData.result.riskLevel === 'medium' ? '#eab308' : '#ef4444'
+                  : 'hsl(0, 70%, 50%)')
+                : playerColor}
               strokeWidth={1.5} strokeDasharray="6,4" opacity={0.35} />
           </g>
         )}
@@ -240,9 +262,24 @@ export function TerritoryMap({ territories, playerEstados, selectedTerritory, on
             destinationId={movementFlow.destinationId}
             quantity={movementFlow.quantity}
             playerColor={playerColor}
+            tipo={movementFlow.actionType || 'mover'}
             onComplete={onAnimationComplete}
           />
         )}
+
+        {/* Hover combat preview overlay on map */}
+        <AnimatePresence>
+          {hoverCombatData && (
+            <HoverCombatPreview
+              attackerForce={movementFlow.quantity}
+              defenderForce={hoverCombatData.defenderForce}
+              defenseBase={hoverCombatData.defenseBase}
+              x={hoverCombatData.x}
+              y={hoverCombatData.y}
+              attackerColor={playerColor}
+            />
+          )}
+        </AnimatePresence>
 
         {/* Worm explosion effect */}
         {wormExplosionTarget && (
