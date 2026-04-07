@@ -422,7 +422,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_game_participant: {
+        Args: { _partida_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       action_type: "mover" | "atacar" | "fortificar" | "espionar" | "extrair"
