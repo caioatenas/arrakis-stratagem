@@ -5,8 +5,10 @@ import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlayer } from '@/hooks/usePlayer';
+import { FACTIONS } from '@/lib/factions';
+import { TERRITORIES } from '@/lib/gameConstants';
 import { motion } from 'framer-motion';
-import { LogOut, Plus, KeyRound } from 'lucide-react';
+import { LogOut, Plus, KeyRound, Bot } from 'lucide-react';
 import { toast } from 'sonner';
 
 function generateCode(): string {
@@ -35,8 +37,6 @@ export default function Matchmaking() {
     setLoading(true);
     try {
       const code = generateCode();
-
-      // 1. Create match
       const { data: partida, error: partidaErr } = await supabase
         .from('partidas')
         .insert({
@@ -57,7 +57,6 @@ export default function Matchmaking() {
         return;
       }
 
-      // 2. Host joins as first player
       const { error: estadoErr } = await supabase.from('player_estado').insert({
         partida_id: partida.id,
         player_id: player.id,
@@ -76,6 +75,114 @@ export default function Matchmaking() {
     } catch (err: any) {
       console.error('CREATE_MATCH_UNEXPECTED:', err);
       toast.error('Erro inesperado ao criar partida');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSoloTest = async () => {
+    if (!player?.id) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+    setLoading(true);
+    try {
+      const code = generateCode();
+      const hostFaction = FACTIONS[0]; // Atreides
+
+      // 1. Create match
+      const { data: partida, error: partidaErr } = await supabase
+        .from('partidas')
+        .insert({
+          status: 'waiting' as const,
+          turno_atual: 0,
+          max_jogadores: 2,
+          code,
+          host_id: player.id,
+          turn_time: 120,
+          map: 'arrakis',
+        })
+        .select()
+        .single();
+
+      if (partidaErr || !partida) {
+        console.error('SOLO_CREATE_ERROR:', partidaErr);
+        toast.error('Erro ao criar partida solo: ' + (partidaErr?.message || 'desconhecido'));
+        return;
+      }
+
+      // 2. Host joins with Atreides
+      const { error: estadoErr } = await supabase.from('player_estado').insert({
+        partida_id: partida.id,
+        player_id: player.id,
+        spice: 0,
+        acoes_restantes: 2,
+        cor: hostFaction.color,
+        house: hostFaction.id,
+      });
+
+      if (estadoErr) {
+        console.error('SOLO_ESTADO_ERROR:', estadoErr);
+        toast.error('Erro ao configurar jogador: ' + estadoErr.message);
+        return;
+      }
+
+      // 3. Start the game
+      const { error: statusErr } = await supabase.from('partidas')
+        .update({ status: 'in_progress' as const, turno_atual: 1 })
+        .eq('id', partida.id);
+
+      if (statusErr) {
+        console.error('SOLO_STATUS_ERROR:', statusErr);
+        toast.error('Erro ao iniciar partida');
+        return;
+      }
+
+      // 4. Distribute territories — half to player, half neutral
+      const shuffled = [...TERRITORIES].sort(() => Math.random() - 0.5);
+      const terrInserts = shuffled.map((t, i) => ({
+        id: t.id,
+        partida_id: partida.id,
+        nome: t.nome,
+        dono_id: i < Math.ceil(shuffled.length / 2) ? player.id : null,
+        forca: 50,
+        producao_spice: t.producao_spice,
+        defesa_base: t.defesa_base,
+        vizinhos: t.vizinhos,
+        pos_x: t.pos_x,
+        pos_y: t.pos_y,
+        regiao: t.regiao,
+        tipo: t.tipo,
+      }));
+
+      const { error: terrErr } = await supabase.from('territorios').insert(terrInserts);
+      if (terrErr) {
+        console.error('SOLO_TERRITORIES_ERROR:', terrErr);
+        toast.error('Erro ao criar territórios: ' + terrErr.message);
+        return;
+      }
+
+      // 5. Create first turn
+      const { error: turnoErr } = await supabase.from('turnos').insert({ partida_id: partida.id, numero: 1 });
+      if (turnoErr) {
+        console.error('SOLO_TURNO_ERROR:', turnoErr);
+        toast.error('Erro ao criar turno');
+        return;
+      }
+
+      // 6. Game log
+      await supabase.from('game_logs').insert({
+        partida_id: partida.id,
+        turno_numero: 1,
+        nivel: 'publico' as const,
+        mensagem: `🧪 Partida de teste iniciada! Você controla ${hostFaction.name}. Territórios neutros podem ser conquistados.`,
+      });
+
+      toast.success('Partida solo criada!');
+      navigate(`/game/${partida.id}`);
+    } catch (err: any) {
+      console.error('SOLO_UNEXPECTED:', err);
+      toast.error('Erro inesperado');
     } finally {
       setLoading(false);
     }
@@ -104,7 +211,6 @@ export default function Matchmaking() {
         return;
       }
 
-      // Check if already joined
       const { data: existing } = await supabase
         .from('player_estado')
         .select('id')
@@ -116,7 +222,6 @@ export default function Matchmaking() {
         return;
       }
 
-      // Check player count
       const { count } = await supabase
         .from('player_estado')
         .select('*', { count: 'exact', head: true })
@@ -168,6 +273,14 @@ export default function Matchmaking() {
             <Button onClick={() => setShowJoin(true)} disabled={!player} variant="outline" className="w-full h-14 text-lg font-display tracking-[0.15em]">
               <KeyRound className="w-5 h-5 mr-2" /> Entrar com Código
             </Button>
+            <Button
+              onClick={handleSoloTest}
+              disabled={!player || loading}
+              variant="secondary"
+              className="w-full h-14 text-lg font-display tracking-[0.15em]"
+            >
+              <Bot className="w-5 h-5 mr-2" /> {loading ? 'Criando...' : 'Modo Solo (Teste)'}
+            </Button>
             {player && (
               <div className="pt-4 border-t border-border">
                 <p className="text-sm text-muted-foreground font-body">
@@ -184,7 +297,6 @@ export default function Matchmaking() {
         {showCreate && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="border-glow rounded-lg p-8 space-y-6 text-left">
             <h2 className="text-display text-2xl text-primary tracking-[0.1em] text-center">Configurar Partida</h2>
-
             <div className="space-y-2">
               <label className="text-sm font-body text-muted-foreground">Tempo por turno</label>
               <div className="flex gap-2 flex-wrap">
@@ -195,7 +307,6 @@ export default function Matchmaking() {
                 ))}
               </div>
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-body text-muted-foreground">Jogadores (máx)</label>
               <div className="flex gap-2">
@@ -206,14 +317,12 @@ export default function Matchmaking() {
                 ))}
               </div>
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-body text-muted-foreground">Mapa</label>
               <div className="flex gap-2">
                 <Button variant="default" size="sm" className="font-body" disabled>Arrakis (Padrão)</Button>
               </div>
             </div>
-
             <div className="flex gap-3">
               <Button onClick={() => setShowCreate(false)} variant="outline" className="flex-1 font-body">Voltar</Button>
               <Button onClick={handleCreate} disabled={loading} className="flex-1 font-body">
