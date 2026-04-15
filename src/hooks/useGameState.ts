@@ -44,6 +44,7 @@ export function useGameState(partidaId: string | null) {
   const [turnoAtual, setTurnoAtual] = useState(0);
   const [turnoId, setTurnoId] = useState<string | null>(null);
   const [gameStatus, setGameStatus] = useState<string>('waiting');
+  const [vencedorId, setVencedorId] = useState<string | null>(null);
 
   const fetchState = useCallback(async () => {
     if (!partidaId) return;
@@ -61,6 +62,7 @@ export function useGameState(partidaId: string | null) {
     if (partida.data) {
       setTurnoAtual(partida.data.turno_atual);
       setGameStatus(partida.data.status);
+      setVencedorId(partida.data.vencedor_id || null);
     }
     if (turno.data && turno.data.length > 0) setTurnoId(turno.data[0].id);
     if (gameLogs.data) setLogs(gameLogs.data as GameLog[]);
@@ -96,5 +98,5 @@ export function useGameState(partidaId: string | null) {
     return () => { supabase.removeChannel(channel); };
   }, [partidaId, fetchState]);
 
-  return { territories, playerEstados, logs, turnoAtual, turnoId, gameStatus, refetch: fetchState };
+  return { territories, playerEstados, logs, turnoAtual, turnoId, gameStatus, vencedorId, refetch: fetchState };
 }
