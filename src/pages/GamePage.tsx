@@ -15,13 +15,14 @@ import { MapLegend } from '@/components/game/map/MapLegend';
 import { WormEventOverlay, type WormEventData } from '@/components/game/WormEventOverlay';
 import { VictoryProgress } from '@/components/game/VictoryProgress';
 import { TurnAnimationQueue } from '@/components/game/TurnAnimationQueue';
+import { GameOverScreen } from '@/components/game/GameOverScreen';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function GamePage() {
   const { partidaId } = useParams<{ partidaId: string }>();
   const { user } = useAuth();
   const { player } = usePlayer(user?.id);
-  const { territories, playerEstados, logs, turnoAtual, turnoId, gameStatus, refetch } = useGameState(partidaId || null);
+  const { territories, playerEstados, logs, turnoAtual, turnoId, gameStatus, vencedorId, refetch } = useGameState(partidaId || null);
   const [selectedTerritory, setSelectedTerritory] = useState<string | null>(null);
   const { flow, selectOrigin, selectAction, setQuantity, confirmQuantity, selectDestination, startAnimation, reset } = useMovementFlow();
   const [wormEvent, setWormEvent] = useState<WormEventData | null>(null);
@@ -116,12 +117,12 @@ export default function GamePage() {
 
   if (gameStatus === 'finished') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="text-center space-y-4">
-          <h1 className="text-display text-5xl text-primary tracking-[0.2em]">PARTIDA ENCERRADA</h1>
-          <p className="text-foreground font-body text-xl">A guerra terminou.</p>
-        </motion.div>
-      </div>
+      <GameOverScreen
+        territories={territories}
+        playerEstados={playerEstados}
+        currentPlayerId={player?.id || null}
+        vencedorId={vencedorId}
+      />
     );
   }
 
