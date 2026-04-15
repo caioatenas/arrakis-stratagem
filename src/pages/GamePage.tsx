@@ -79,12 +79,6 @@ export default function GamePage() {
       quantidade: flow.quantity,
     });
 
-    if (myEstado) {
-      await supabase.from('player_estado')
-        .update({ acoes_restantes: Math.max(0, (myEstado.acoes_restantes || 0) - 1) })
-        .eq('id', myEstado.id);
-    }
-
     setTimeout(() => {
       reset();
       setSelectedTerritory(null);

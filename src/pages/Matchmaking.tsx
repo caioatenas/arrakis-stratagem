@@ -53,7 +53,7 @@ export default function Matchmaking() {
 
       if (partidaErr || !partida) {
         console.error('CREATE_MATCH_ERROR:', partidaErr);
-        toast.error('Erro ao criar partida: ' + (partidaErr?.message || 'desconhecido'));
+        toast.error('Erro ao criar partida. Tente novamente.');
         return;
       }
 
@@ -67,7 +67,7 @@ export default function Matchmaking() {
 
       if (estadoErr) {
         console.error('CREATE_PLAYER_ESTADO_ERROR:', estadoErr);
-        toast.error('Erro ao entrar na partida: ' + estadoErr.message);
+        toast.error('Erro ao entrar na partida. Tente novamente.');
         return;
       }
 
@@ -107,7 +107,7 @@ export default function Matchmaking() {
 
       if (partidaErr || !partida) {
         console.error('SOLO_CREATE_ERROR:', partidaErr);
-        toast.error('Erro ao criar partida solo: ' + (partidaErr?.message || 'desconhecido'));
+        toast.error('Erro ao criar partida solo. Tente novamente.');
         return;
       }
 
@@ -123,7 +123,7 @@ export default function Matchmaking() {
 
       if (estadoErr) {
         console.error('SOLO_ESTADO_ERROR:', estadoErr);
-        toast.error('Erro ao configurar jogador: ' + estadoErr.message);
+        toast.error('Erro ao configurar jogador. Tente novamente.');
         return;
       }
 
@@ -158,7 +158,7 @@ export default function Matchmaking() {
       const { error: terrErr } = await supabase.from('territorios').insert(terrInserts);
       if (terrErr) {
         console.error('SOLO_TERRITORIES_ERROR:', terrErr);
-        toast.error('Erro ao criar territórios: ' + terrErr.message);
+        toast.error('Erro ao criar territórios. Tente novamente.');
         return;
       }
 
@@ -242,7 +242,7 @@ export default function Matchmaking() {
 
       if (joinErr) {
         console.error('JOIN_MATCH_ERROR:', joinErr);
-        toast.error('Erro ao entrar: ' + joinErr.message);
+        toast.error('Erro ao entrar na partida. Tente novamente.');
         return;
       }
 
