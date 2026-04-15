@@ -486,7 +486,7 @@ Deno.serve(async (req) => {
       if (pe.spice >= VICTORY_SPICE) vencedorId = pe.player_id;
     }
     const activePlayers = playerEstados.filter((pe: any) => pe.ativo);
-    if (activePlayers.length === 1) vencedorId = activePlayers[0].player_id;
+    if (activePlayers.length === 1 && playerEstados.length > 1) vencedorId = activePlayers[0].player_id;
 
     // ═══════════════════════════════════════
     // UPDATE DATABASE
