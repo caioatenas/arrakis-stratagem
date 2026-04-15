@@ -55,6 +55,30 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // ── AUTH CHECK ──
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const anonClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userId = claimsData.claims.sub;
+
+    // Service role client for game state mutations
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -67,14 +91,29 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [{ data: territorios }, { data: acoes }, { data: partida }, { data: playerEstados }] = await Promise.all([
+    // ── HOST VERIFICATION ──
+    const { data: partida } = await supabase.from("partidas").select("*").eq("id", partida_id).single();
+    if (!partida) {
+      return new Response(JSON.stringify({ error: "Game not found" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify caller is the host
+    const { data: hostPlayer } = await supabase.from("players").select("id").eq("user_id", userId).single();
+    if (!hostPlayer || hostPlayer.id !== partida.host_id) {
+      return new Response(JSON.stringify({ error: "Only the host can resolve turns" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const [{ data: territorios }, { data: acoes }, { data: playerEstados }] = await Promise.all([
       supabase.from("territorios").select("*").eq("partida_id", partida_id),
       supabase.from("acoes").select("*").eq("turno_id", turno_id),
-      supabase.from("partidas").select("*").eq("id", partida_id).single(),
       supabase.from("player_estado").select("*").eq("partida_id", partida_id),
     ]);
 
-    if (!territorios || !partida || !playerEstados) {
+    if (!territorios || !playerEstados) {
       return new Response(JSON.stringify({ error: "Game state not found" }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -84,10 +123,25 @@ Deno.serve(async (req) => {
     const logs: Array<{ partida_id: string; turno_numero: number; nivel: string; mensagem: string; dados: Record<string, unknown>; player_id?: string }> = [];
     const terrMap = new Map(territorios.map((t: any) => [t.id, { ...t }]));
 
+    // ── ACTION LIMIT ENFORCEMENT ──
+    // Group actions by player and cap at their acoes_restantes
+    const actionsByPlayer = new Map<string, any[]>();
+    for (const a of (acoes || [])) {
+      const list = actionsByPlayer.get(a.player_id) || [];
+      list.push(a);
+      actionsByPlayer.set(a.player_id, list);
+    }
+    const allowedActions: any[] = [];
+    for (const [playerId, playerActions] of actionsByPlayer) {
+      const pe = playerEstados.find((p: any) => p.player_id === playerId);
+      const limit = pe ? pe.acoes_restantes : 2;
+      allowedActions.push(...playerActions.slice(0, limit));
+    }
+
     // ═══════════════════════════════════════
     // 1. RESOLVE MOVEMENTS
     // ═══════════════════════════════════════
-    const moveActions = (acoes || []).filter((a: any) => a.tipo === "mover");
+    const moveActions = allowedActions.filter((a: any) => a.tipo === "mover");
     for (const action of moveActions) {
       const origem = terrMap.get(action.origem_id);
       const destino = terrMap.get(action.destino_id);
@@ -114,7 +168,7 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════
     // 2. RESOLVE ESPIONAGE
     // ═══════════════════════════════════════
-    const spyActions = (acoes || []).filter((a: any) => a.tipo === "espionar");
+    const spyActions = allowedActions.filter((a: any) => a.tipo === "espionar");
     for (const action of spyActions) {
       const target = terrMap.get(action.destino_id || action.origem_id);
       if (!target) continue;
@@ -129,7 +183,7 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════
     // 3. RESOLVE FORTIFY
     // ═══════════════════════════════════════
-    const fortifyActions = (acoes || []).filter((a: any) => a.tipo === "fortificar");
+    const fortifyActions = allowedActions.filter((a: any) => a.tipo === "fortificar");
     for (const action of fortifyActions) {
       const terr = terrMap.get(action.origem_id || action.destino_id);
       if (!terr || terr.dono_id !== action.player_id) continue;
@@ -144,7 +198,7 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════
     // 4. RESOLVE EXTRACT
     // ═══════════════════════════════════════
-    const extractActions = (acoes || []).filter((a: any) => a.tipo === "extrair");
+    const extractActions = allowedActions.filter((a: any) => a.tipo === "extrair");
     for (const action of extractActions) {
       const terr = terrMap.get(action.origem_id || action.destino_id);
       if (!terr || terr.dono_id !== action.player_id) continue;
@@ -162,7 +216,7 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════
     // 5. RESOLVE COMBAT (with 0.6x damage multiplier)
     // ═══════════════════════════════════════
-    const attackActions = (acoes || []).filter((a: any) => a.tipo === "atacar");
+    const attackActions = allowedActions.filter((a: any) => a.tipo === "atacar");
     for (const action of attackActions) {
       const origem = terrMap.get(action.origem_id);
       const destino = terrMap.get(action.destino_id);
@@ -235,16 +289,13 @@ Deno.serve(async (req) => {
             dados: { action: "salary", cost, payable }, player_id: pe.player_id,
           });
         } else {
-          // Can't fully pay — desertion
           const canPay = pe.spice;
           const percentPaid = cost > 0 ? canPay / cost : 0;
           const troopsMaintained = Math.floor(payable * percentPaid);
           const troopsLost = payable - troopsMaintained;
           pe.spice = 0;
 
-          // Distribute losses proportionally across territories
           let remainingLoss = troopsLost;
-          // Sort by force descending so we remove from strongest first
           const sorted = [...ownedTerrs].sort((a: any, b: any) => b.forca - a.forca);
           for (const t of sorted) {
             if (remainingLoss <= 0) break;
@@ -278,7 +329,6 @@ Deno.serve(async (req) => {
     const eventos: Array<{ turno_id: string; partida_id: string; tipo: string; descricao: string; territorios_afetados: string[] }> = [];
     const terrArray = Array.from(terrMap.values());
 
-    // Progressive pressure multiplier
     let pressureMult = 1.0;
     if (turnoNum >= PRESSURE_ESCALATE) {
       pressureMult = 1.25;
@@ -478,8 +528,9 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
+    console.error("resolve-turn error:", err);
     return new Response(
-      JSON.stringify({ error: String(err) }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

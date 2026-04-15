@@ -134,7 +134,7 @@ export default function LobbyPage() {
       const { error: terrErr } = await supabase.from('territorios').insert(terrInserts);
       if (terrErr) {
         console.error('INSERT_TERRITORIES_ERROR:', terrErr);
-        toast.error('Erro ao criar territórios: ' + terrErr.message);
+        toast.error('Erro ao criar territórios. Tente novamente.');
         return;
       }
 

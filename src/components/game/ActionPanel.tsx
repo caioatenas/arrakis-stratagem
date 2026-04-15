@@ -252,9 +252,6 @@ export function ActionPanel({
     };
 
     await supabase.from('acoes').insert(acao);
-    if (playerEstado) {
-      await supabase.from('player_estado').update({ acoes_restantes: Math.max(0, acoes - 1) }).eq('id', playerEstado.id);
-    }
 
     setSelectedAction(null);
     setTargetTerritory(null);
