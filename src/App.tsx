@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import AuthPage from "./pages/AuthPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import Matchmaking from "./pages/Matchmaking";
 import LobbyPage from "./pages/LobbyPage";
 import GamePage from "./pages/GamePage";
@@ -26,6 +27,7 @@ function AppRoutes() {
   if (!user) {
     return (
       <Routes>
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="*" element={<AuthPage />} />
       </Routes>
     );
@@ -36,6 +38,7 @@ function AppRoutes() {
       <Route path="/" element={<Matchmaking />} />
       <Route path="/lobby/:partidaId" element={<LobbyPage />} />
       <Route path="/game/:partidaId" element={<GamePage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
