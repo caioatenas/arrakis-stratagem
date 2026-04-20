@@ -1,5 +1,6 @@
 import type { GameLog as GameLogType } from '@/hooks/useGameState';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { InfoHint } from '@/components/ui/InfoHint';
 
 interface GameLogProps {
   logs: GameLogType[];
@@ -17,7 +18,15 @@ export function GameLog({ logs }: GameLogProps) {
 
   return (
     <div className="border-glow rounded-lg p-4">
-      <h3 className="text-display text-primary text-lg mb-3">Log de Batalha</h3>
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-display text-primary text-lg">Log de Batalha</h3>
+        <InfoHint title="NÍVEIS DE VISIBILIDADE">
+          <p>Logs têm 3 níveis de visibilidade:</p>
+          <p><span className="text-foreground font-semibold">Público</span> — todos veem (combates, conquistas, eventos).</p>
+          <p><span className="text-sand-light font-semibold">Jogador</span> — só você vê (ações suas, espionagem).</p>
+          <p><span className="text-muted-foreground font-semibold">Interno</span> — detalhes técnicos da resolução.</p>
+        </InfoHint>
+      </div>
       <ScrollArea className="h-[200px]">
         <div className="space-y-1">
           {logs.length === 0 && (
