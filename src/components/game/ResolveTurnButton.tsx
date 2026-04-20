@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { InfoHint } from '@/components/ui/InfoHint';
 import { supabase } from '@/integrations/supabase/client';
 import { Zap } from 'lucide-react';
 import type { WormEventData } from './WormEventOverlay';
@@ -38,14 +39,21 @@ export function ResolveTurnButton({ partidaId, turnoId, turnoAtual, onResolved }
   };
 
   return (
-    <Button
-      onClick={resolveTurn}
-      disabled={resolving}
-      size="sm"
-      className="font-display tracking-wider"
-    >
-      <Zap className="w-4 h-4 mr-1" />
-      {resolving ? 'Resolvendo...' : 'Resolver Turno'}
-    </Button>
+    <div className="inline-flex items-center gap-1.5">
+      <Button
+        onClick={resolveTurn}
+        disabled={resolving}
+        size="sm"
+        className="font-display tracking-wider"
+      >
+        <Zap className="w-4 h-4 mr-1" />
+        {resolving ? 'Resolvendo...' : 'Resolver Turno'}
+      </Button>
+      <InfoHint title="RESOLUÇÃO DO TURNO" side="bottom">
+        <p>Resolve todas as ações enviadas neste turno em ordem determinística.</p>
+        <p>Combates usam fórmula <strong>anti-snowball</strong>: dano × 0.6 para evitar que o líder esmague todos.</p>
+        <p className="text-sand-light">⚠️ <strong>Sandworm:</strong> Em duplas no 2d6, Shai-Hulud emerge e devora tropas em territórios desérticos.</p>
+      </InfoHint>
+    </div>
   );
 }

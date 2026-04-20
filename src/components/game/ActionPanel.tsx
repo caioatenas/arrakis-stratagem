@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
+import { InfoHint } from '@/components/ui/InfoHint';
 import { supabase } from '@/integrations/supabase/client';
 import type { Territory, PlayerEstado } from '@/hooks/useGameState';
 import type { MovementFlow } from '@/hooks/useMovementFlow';
-import { ACTION_LABELS } from '@/lib/gameConstants';
+import { ACTION_LABELS, COMBAT_DAMAGE_MULTIPLIER } from '@/lib/gameConstants';
 import { CombatPreview } from './CombatPreview';
 import { Swords, Shield, Eye, Move, Gem, ArrowRight, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -62,7 +63,17 @@ export function ActionPanel({
     return (
       <div className="border-glow rounded-lg p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-display text-primary text-lg">{flowTitle}</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-display text-primary text-lg">{flowTitle}</h3>
+            {isAttack && (
+              <InfoHint title="FÓRMULA DE COMBATE" side="bottom">
+                <p>Combate usa um multiplicador <strong>anti-snowball</strong> de <span className="text-primary">{COMBAT_DAMAGE_MULTIPLIER}x</span> no dano.</p>
+                <p>Isso evita que o jogador líder esmague todos os outros com força bruta.</p>
+                <p>Defensores ganham bônus de <strong>defesa base</strong> do território.</p>
+                <p className="text-sand-light">A previsão Monte Carlo mostra a probabilidade real de vitória.</p>
+              </InfoHint>
+            )}
+          </div>
           <Button variant="ghost" size="icon" onClick={onCancelMove} className="h-7 w-7">
             <X className="w-4 h-4" />
           </Button>

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import type { Territory, PlayerEstado } from '@/hooks/useGameState';
 import { FACTIONS } from '@/lib/factions';
 import { VICTORY_TERRITORY_PCT, VICTORY_SPICE, SALARY_CYCLE_TURNS } from '@/lib/gameConstants';
+import { InfoHint } from '@/components/ui/InfoHint';
 import { Trophy, Target, Gem, Coins } from 'lucide-react';
 
 interface VictoryProgressProps {
@@ -55,6 +56,12 @@ export function VictoryProgress({ territories, playerEstados, currentPlayerId, t
       <div className="flex items-center gap-2">
         <Trophy className="w-4 h-4 text-primary" />
         <h3 className="text-display text-primary text-sm tracking-wider">DOMÍNIO</h3>
+        <InfoHint title="CONDIÇÕES DE VITÓRIA" side="bottom">
+          <p>🏆 Controlar <strong>{VICTORY_TERRITORY_PCT}% dos territórios</strong>.</p>
+          <p>💰 Acumular <strong>{VICTORY_SPICE} spice</strong>.</p>
+          <p>⚔ Ser o <strong>último jogador ativo</strong> (todos os outros eliminados).</p>
+          <p className="text-muted-foreground italic">A condição é checada ao final de cada turno.</p>
+        </InfoHint>
       </div>
 
       {/* Territory bar */}
